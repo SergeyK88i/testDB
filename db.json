@@ -8,17 +8,61 @@
             "corporate_unit": "КИБ",
             "tasks": [
               {
-               "planned_end": "2023-11-21",
-               "duedate": "2024-02-12",
+               "planned_end": "2024-01-10",
+               "duedate": "2024-01-25",
+               "components": "K1"
+              },
+              {
+               "planned_end": "2024-01-10",
+               "duedate": "2024-01-25",
+               "components": "K2"
+              },
+              {
+               "planned_end": "2024-01-10",
+               "duedate": "2024-01-25",
+               "components": "K3"
+              },
+              {
+               "planned_end": "2024-01-25",
+               "duedate": "2024-02-20",
+               "components": "K4"
+              },
+              {
+               "planned_end": "2024-02-20",
+               "duedate": "2024-03-05",
+               "components": "K5"
+              },
+              {
+               "planned_end": "2024-03-05",
+               "duedate": "2024-03-20",
+               "components": "K6"
+              },
+              {
+               "planned_end": "2024-03-20",
+               "duedate": "2024-04-20",
                "components": "K7"
               }
             ],
             "story": [
               {
-               "planned_end": "2024-06-23",
-               "duedate": "2024-06-23",
+               "planned_end": "2024-04-20",
+               "duedate": "2024-04-29",
+               "components": "ROV"
+               },
+              {
+               "planned_end": "2024-04-29",
+               "duedate": "2024-05-10",
+               "components": "InitLoad"
+              },
+              {
+               "planned_end": "2024-05-10",
+               "duedate": "2024-05-24",
                "components": "OE"
-               
+              },
+              {
+               "planned_end": "2024-05-24",
+               "duedate": "2024-07-24",
+               "components": "PE"
               }
             ]
 
