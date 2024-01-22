@@ -6,6 +6,11 @@
             "ci": "00000001",
             "label": "Экспертное Финансовое Консультирование",
             "corporate_unit": "КИБ",
+	    "status": "In Progress",
+	    "days_shift": "4",
+	    "days_shift_all": "15",
+	    "assignee_displayName_DIT": "Гаврилов Григорий Тихонович",
+	    "assignee_displayName_CAP": "Грибова Вера Матвеевна",
             "tasks": [
               {
                "planned_end": "2024-01-10",
@@ -73,19 +78,68 @@
             "ci": "00000002",
             "label": "Инновационные Финансовые Ресурсы",
             "corporate_unit": "КИБ",
-         "tasks": [
+            "status": "In Progress",
+	    "days_shift": "5",
+	    "days_shift_all": "7",
+	    "assignee_displayName_DIT": "Рыбаков Богдан Никитич",
+ 	    "assignee_displayName_CAP": "Крылова Марина Ярославовна",
+            "tasks": [
               {
-               "planned_end": "2023-11-21",
-               "duedate": "2024-02-14",
+               "planned_end": "2024-01-10",
+               "duedate": "2024-01-25",
+               "components": "K1"
+              },
+              {
+               "planned_end": "2024-01-10",
+               "duedate": "2024-01-25",
+               "components": "K2"
+              },
+              {
+               "planned_end": "2024-01-10",
+               "duedate": "2024-01-25",
+               "components": "K3"
+              },
+              {
+               "planned_end": "2024-01-25",
+               "duedate": "2024-02-20",
+               "components": "K4"
+              },
+              {
+               "planned_end": "2024-02-20",
+               "duedate": "2024-03-05",
+               "components": "K5"
+              },
+              {
+               "planned_end": "2024-03-05",
+               "duedate": "2024-03-20",
+               "components": "K6"
+              },
+              {
+               "planned_end": "2024-03-20",
+               "duedate": "2024-04-20",
                "components": "K7"
               }
             ],
             "story": [
               {
-               "planned_end": "2024-06-23",
-               "duedate": "2024-06-23",
+               "planned_end": "2024-04-20",
+               "duedate": "2024-04-29",
+               "components": "ROV"
+               },
+              {
+               "planned_end": "2024-04-29",
+               "duedate": "2024-05-10",
+               "components": "InitLoad"
+              },
+              {
+               "planned_end": "2024-05-10",
+               "duedate": "2024-05-24",
                "components": "OE"
-               
+              },
+              {
+               "planned_end": "2024-05-24",
+               "duedate": "2024-06-24",
+               "components": "PE"
               }
             ]
 
@@ -96,6 +150,11 @@
             "ci": "00000003",
             "label": "Проактивные Инвестиционные Решения",
             "corporate_unit": "РБ",
+            "status": "In Progress",
+	    "days_shift": "2",
+	    "days_shift_all": "0",
+	    "assignee_displayName_DIT": "Кузьмина Полина Александровна",
+ 	    "assignee_displayName_CAP": "Макаров Владимир Константинович",
             "tasks": [
               {
                "planned_end": "2023-11-21",
@@ -119,7 +178,180 @@
             "ci": "00000004",
             "label": "Глобальное Инвестиционное Сотрудничество",
             "corporate_unit": "РБ",
-         "tasks": [
+            "status": "In Progress",
+	    "days_shift": "0",
+	    "days_shift_all": "0",
+	    "assignee_displayName_DIT": "Цветкова Алёна Макаровна",
+ 	    "assignee_displayName_CAP": "Крылова Мария Михайловна",
+            "tasks": [
+              {
+               "planned_end": "2023-11-21",
+               "duedate": "2024-02-18",
+               "components": "K7"
+              }
+            ],
+            "story": [
+              {
+               "planned_end": "2024-06-23",
+               "duedate": "2024-06-23",
+               "components": "OE"
+               
+              }
+            ]
+
+        },
+        {
+            "id": 5,
+            "name": "Сделки B2B",
+            "ci": "00000005",
+            "label": "Сделки B2B",
+            "corporate_unit": "РБ",
+            "status": "In Progress",
+	    "days_shift": "10",
+	    "days_shift_all": "20",
+	    "assignee_displayName_DIT": "Шестакова Алёна Андреевна",
+ 	    "assignee_displayName_CAP": "Горбунов Елисей Маркович",
+            "tasks": [
+              {
+               "planned_end": "2023-11-21",
+               "duedate": "2024-02-18",
+               "components": "K7"
+              }
+            ],
+            "story": [
+              {
+               "planned_end": "2024-06-23",
+               "duedate": "2024-06-23",
+               "components": "OE"
+               
+              }
+            ]
+
+        },
+        {
+            "id": 6,
+            "name": "Консолидированная отчетность",
+            "ci": "00000006",
+            "label": "Консолидированная отчетность",
+            "corporate_unit": "КИБ",
+            "status": "In Progress",
+	    "days_shift": "10",
+	    "days_shift_all": "20",
+	    "assignee_displayName_DIT": "Максимов Иван Русланович",
+ 	    "assignee_displayName_CAP": "Царева Валерия Лукинична",
+            "tasks": [
+              {
+               "planned_end": "2023-11-21",
+               "duedate": "2024-02-18",
+               "components": "K7"
+              }
+            ],
+            "story": [
+              {
+               "planned_end": "2024-06-23",
+               "duedate": "2024-06-23",
+               "components": "OE"
+               
+              }
+            ]
+
+        },
+        {
+            "id": 7,
+            "name": "Корпоративные облигации",
+            "ci": "00000007",
+            "label": "Корпоративные облигации",
+            "corporate_unit": "КИБ",
+            "status": "In Progress",
+	    "days_shift": "3",
+	    "days_shift_all": "5",
+	    "assignee_displayName_DIT": "Игнатов Иван Даниилович",
+ 	    "assignee_displayName_CAP": "Семенов Даниил Маркович",
+            "tasks": [
+              {
+               "planned_end": "2023-11-21",
+               "duedate": "2024-02-18",
+               "components": "K7"
+              }
+            ],
+            "story": [
+              {
+               "planned_end": "2024-06-23",
+               "duedate": "2024-06-23",
+               "components": "OE"
+               
+              }
+            ]
+
+        },
+        {
+            "id": 8,
+            "name": "Анализ рисков контрагентов",
+            "ci": "00000008",
+            "label": "Анализ рисков контрагентов",
+            "corporate_unit": "РБ",
+            "status": "In Progress",
+	    "days_shift": "2",
+	    "days_shift_all": "50",
+	    "assignee_displayName_DIT": "Федорова Анастасия Всеволодовна",
+ 	    "assignee_displayName_CAP": "Петрова Полина Данииловна",
+            "tasks": [
+              {
+               "planned_end": "2023-11-21",
+               "duedate": "2024-02-18",
+               "components": "K7"
+              }
+            ],
+            "story": [
+              {
+               "planned_end": "2024-06-23",
+               "duedate": "2024-06-23",
+               "components": "OE"
+               
+              }
+            ]
+
+        },
+        {
+            "id": 9,
+            "name": "Система учета складских остатков",
+            "ci": "00000009",
+            "label": "Система учета складских остатков",
+            "corporate_unit": "КИБ",
+            "status": "In Progress",
+	    "days_shift": "7",
+	    "days_shift_all": "10",
+	    "assignee_displayName_DIT": "Евдокимов Михаил Даниилович",
+ 	    "assignee_displayName_CAP": "Алексеев Даниил Александрович",
+            "tasks": [
+              {
+               "planned_end": "2023-11-21",
+               "duedate": "2024-02-18",
+               "components": "K7"
+              }
+            ],
+            "story": [
+              {
+               "planned_end": "2024-06-23",
+               "duedate": "2024-06-23",
+               "components": "OE"
+               
+              }
+            ]
+
+        },
+        {
+            "id": 10,
+            "name": "Управление партнерскими продажами и комиссионым доходом",
+            "ci": "00000010",
+            "label": "Управление партнерскими продажами и комиссионым доходом",
+            "corporate_unit": "КИБ",
+            "status": "In Progress",
+	    "days_shift": "24",
+	    "days_shift_all": "7",
+	    "assignee_displayName_DIT": "Ковалев Ярослав Иванович",
+ 	    "assignee_displayName_CAP": "Баранов Дмитрий Андреевич",
+            "tasks": [
               {
                "planned_end": "2023-11-21",
                "duedate": "2024-02-18",
