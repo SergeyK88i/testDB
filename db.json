@@ -11,6 +11,7 @@
 	    "days_shift_all": "15",
 	    "assignee_displayName_DIT": "Гаврилов Григорий Тихонович",
 	    "assignee_displayName_CAP": "Грибова Вера Матвеевна",
+	    "description": "* NEW\r\n *Экспертное Финансовое Консультирование_NEW\r\n * Инсталляция: КБ\r\n *Слой изоляции\r\n * Нагрузка: 833 tps\r\n * Поставка: Типовая\r\n * Команда: Загрузка-2",
             "tasks": [
               {
                "planned_end": "2024-01-10",
@@ -83,6 +84,7 @@
 	    "days_shift_all": "7",
 	    "assignee_displayName_DIT": "Рыбаков Богдан Никитич",
  	    "assignee_displayName_CAP": "Крылова Марина Ярославовна",
+	    "description": "* NEW\r\n *Инновационные Финансовые Ресурсы_NEW\r\n * Инсталляция: КБ\r\n *Слой изоляции\r\n * Нагрузка: 300 tps\r\n * Поставка: Типовая\r\n * Команда: Загрузка-1",
             "tasks": [
               {
                "planned_end": "2024-01-10",
