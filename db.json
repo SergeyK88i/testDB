@@ -145,6 +145,78 @@
               }
             ]
 
-        }
-    ]
+        },
+	    {
+            "id": 3,
+            "name": "Инновационные",
+            "ci": "00000002",
+            "label": "Инновационные",
+            "corporate_unit": "КИБ",
+            "status": "In Progress",
+	    "days_shift": "5",
+	    "days_shift_all": "7",
+	    "assignee_displayName_DIT": "Рыбаков Богдан Никитич",
+ 	    "assignee_displayName_CAP": "Крылова Марина Ярославовна",
+	    "description": "* NEW\r\n *Инновационные Финансовые Ресурсы_NEW\r\n * Инсталляция: КБ\r\n *Слой изоляции\r\n * Нагрузка: 300 tps\r\n * Поставка: Типовая\r\n * Команда: Загрузка-1",
+            "tasks": [
+              {
+               "planned_end": "2024-01-10",
+               "duedate": "2024-01-25",
+               "components": "K1"
+              },
+              {
+               "planned_end": "2024-01-20",
+               "duedate": "2024-02-25",
+               "components": "K2"
+              },
+              {
+               "planned_end": "2024-02-05",
+               "duedate": "2024-02-25",
+               "components": "K3"
+              },
+		    {
+               "planned_end": "2024-02-25",
+               "duedate": "2024-03-10",
+               "components": "K4"
+              },
+              {
+               "planned_end": "2024-03-10",
+               "duedate": "2024-03-25",
+               "components": "K5"
+              },
+              {
+               "planned_end": "2024-03-25",
+               "duedate": "2024-04-20",
+               "components": "K6"
+              },
+              {
+               "planned_end": "2024-04-20",
+               "duedate": "2024-05-20",
+               "components": "K7"
+              }
+	    ],
+            "story": [
+              {
+               "planned_end": "2024-05-10",
+               "duedate": "2024-05-25",
+               "components": "ROV"
+               },
+              {
+               "planned_end": "2024-05-25",
+               "duedate": "2024-06-14",
+               "components": "InitLoad"
+              },
+              {
+               "planned_end": "2024-06-14",
+               "duedate": "2024-06-30",
+               "components": "OE"
+              },
+              {
+               "planned_end": "2024-06-30",
+               "duedate": "2024-07-15",
+               "components": "PE"
+              }
+            ]
+	}
+     ]
 }
