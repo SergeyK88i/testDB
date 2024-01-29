@@ -4,6 +4,7 @@
             "id": 1,
             "name": "Экспертное Финансовое Консультирование",
             "ci": "00000001",
+	    "change": "IFT",
             "label": "Экспертное Финансовое Консультирование",
             "corporate_unit": "КИБ",
 	    "status": "In Progress",
@@ -11,7 +12,7 @@
 	    "days_shift_all": "15",
 	    "assignee_displayName_DIT": "Гаврилов Григорий Тихонович",
 	    "assignee_displayName_CAP": "Грибова Вера Матвеевна",
-	    "change": "IFT",
+	    
 	    "description": "* NEW\r\n *Экспертное Финансовое Консультирование_NEW\r\n * Инсталляция: КБ\r\n *Слой изоляции\r\n * Нагрузка: 833 tps\r\n * Поставка: Типовая\r\n * Команда: Загрузка-2",
             "tasks": [
               {
@@ -78,6 +79,7 @@
             "id": 2,
             "name": "Инновационные Финансовые Ресурсы",
             "ci": "00000002",
+	    "change": "PSI",
             "label": "Инновационные Финансовые Ресурсы",
             "corporate_unit": "КИБ",
             "status": "In Progress",
@@ -85,7 +87,7 @@
 	    "days_shift_all": "7",
 	    "assignee_displayName_DIT": "Рыбаков Богдан Никитич",
  	    "assignee_displayName_CAP": "Крылова Марина Ярославовна",
-	    "change": "PSI",
+	    
 	    "description": "* NEW\r\n *Инновационные Финансовые Ресурсы_NEW\r\n * Инсталляция: КБ\r\n *Слой изоляции\r\n * Нагрузка: 300 tps\r\n * Поставка: Типовая\r\n * Команда: Загрузка-1",
             "tasks": [
               {
@@ -152,6 +154,7 @@
             "id": 3,
             "name": "Инновационные",
             "ci": "00000003",
+	    "change": "IFT",
             "label": "Инновационные",
             "corporate_unit": "РБ",
             "status": "In Progress",
@@ -159,7 +162,7 @@
 	    "days_shift_all": "7",
 	    "assignee_displayName_DIT": "Рыбаков Богдан Никитич",
  	    "assignee_displayName_CAP": "Крылова Марина Ярославовна",
-	    "change": "IFT",
+	    
 	    "description": "* NEW\r\n *Инновационные Финансовые Ресурсы_NEW\r\n * Инсталляция: КБ\r\n *Слой изоляции\r\n * Нагрузка: 300 tps\r\n * Поставка: Типовая\r\n * Команда: Загрузка-1",
             "tasks": [
               {
