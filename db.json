@@ -11,6 +11,7 @@
 	    "days_shift_all": "15",
 	    "assignee_displayName_DIT": "Гаврилов Григорий Тихонович",
 	    "assignee_displayName_CAP": "Грибова Вера Матвеевна",
+	    "changeStatus": "IFT",
 	    "description": "* NEW\r\n *Экспертное Финансовое Консультирование_NEW\r\n * Инсталляция: КБ\r\n *Слой изоляции\r\n * Нагрузка: 833 tps\r\n * Поставка: Типовая\r\n * Команда: Загрузка-2",
             "tasks": [
               {
@@ -84,6 +85,7 @@
 	    "days_shift_all": "7",
 	    "assignee_displayName_DIT": "Рыбаков Богдан Никитич",
  	    "assignee_displayName_CAP": "Крылова Марина Ярославовна",
+	    "changeStatus": "PSI",
 	    "description": "* NEW\r\n *Инновационные Финансовые Ресурсы_NEW\r\n * Инсталляция: КБ\r\n *Слой изоляции\r\n * Нагрузка: 300 tps\r\n * Поставка: Типовая\r\n * Команда: Загрузка-1",
             "tasks": [
               {
@@ -157,6 +159,7 @@
 	    "days_shift_all": "7",
 	    "assignee_displayName_DIT": "Рыбаков Богдан Никитич",
  	    "assignee_displayName_CAP": "Крылова Марина Ярославовна",
+	    "changeStatus": "Init TKK load",
 	    "description": "* NEW\r\n *Инновационные Финансовые Ресурсы_NEW\r\n * Инсталляция: КБ\r\n *Слой изоляции\r\n * Нагрузка: 300 tps\r\n * Поставка: Типовая\r\n * Команда: Загрузка-1",
             "tasks": [
               {
@@ -190,7 +193,7 @@
                "components": "K6"
               },
               {
-               "planned_end": "2024-04-20",
+               "planned_end": "2024-03-25",
                "duedate": "2024-05-20",
                "components": "K7"
               }
