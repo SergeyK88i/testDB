@@ -151,15 +151,15 @@
 	    {
             "id": 3,
             "name": "Инновационные",
-            "ci": "00000002",
+            "ci": "00000003",
             "label": "Инновационные",
-            "corporate_unit": "КИБ",
+            "corporate_unit": "РБ",
             "status": "In Progress",
 	    "days_shift": "5",
 	    "days_shift_all": "7",
 	    "assignee_displayName_DIT": "Рыбаков Богдан Никитич",
  	    "assignee_displayName_CAP": "Крылова Марина Ярославовна",
-	    "changeStatus": "Init TKK load",
+	    "changeStatus": "IFT",
 	    "description": "* NEW\r\n *Инновационные Финансовые Ресурсы_NEW\r\n * Инсталляция: КБ\r\n *Слой изоляции\r\n * Нагрузка: 300 tps\r\n * Поставка: Типовая\r\n * Команда: Загрузка-1",
             "tasks": [
               {
