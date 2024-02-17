@@ -18,37 +18,37 @@
               {
                "planned_end": "2024-01-10",
                "duedate": "2024-01-25",
-               "components": "K1"
+               "components": "K7"
               },
               {
                "planned_end": "2024-01-10",
                "duedate": "2024-01-25",
-               "components": "K2"
+               "components": "K2.5"
               },
               {
                "planned_end": "2024-01-10",
                "duedate": "2024-01-25",
-               "components": "K3"
+               "components": "K30"
               },
               {
                "planned_end": "2024-01-25",
                "duedate": "2024-02-20",
-               "components": "K4"
+               "components": "Kan"
               },
               {
                "planned_end": "2024-02-20",
                "duedate": "2024-03-05",
-               "components": "K5"
+               "components": "qwe"
               },
               {
                "planned_end": "2024-03-05",
                "duedate": "2024-03-20",
-               "components": "K6"
+               "components": "98"
               },
               {
                "planned_end": "2024-03-05",
                "duedate": "2024-04-20",
-               "components": "K7"
+               "components": "K7.90"
               }
             ],
             "story": [
