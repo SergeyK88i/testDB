@@ -23,32 +23,32 @@
               {
                "planned_end": "2024-01-10",
                "duedate": "2024-01-25",
-               "components": "K2.5"
+               "components": "K6"
               },
               {
                "planned_end": "2024-01-10",
                "duedate": "2024-01-25",
-               "components": "K30"
+               "components": "K2"
               },
               {
                "planned_end": "2024-01-25",
                "duedate": "2024-02-20",
-               "components": "Kan"
+               "components": "K3"
               },
               {
                "planned_end": "2024-02-20",
                "duedate": "2024-03-05",
-               "components": "qwe"
+               "components": "K5"
               },
               {
                "planned_end": "2024-03-05",
                "duedate": "2024-03-20",
-               "components": "98"
+               "components": "K1"
               },
               {
                "planned_end": "2024-03-05",
                "duedate": "2024-04-20",
-               "components": "K2.5"
+               "components": "K4"
               }
             ],
             "story": [
