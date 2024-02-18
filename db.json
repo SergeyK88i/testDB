@@ -55,22 +55,22 @@
               {
                "planned_end": "2024-04-10",
                "duedate": "2024-04-29",
-               "components": "ROV"
+               "components": "InitLoad"
                },
               {
                "planned_end": "2024-04-21",
                "duedate": "2024-05-05",
-               "components": "InitLoad"
+               "components": "RoV"
               },
               {
                "planned_end": "2024-05-10",
                "duedate": "2024-05-25",
-               "components": "OE"
+               "components": "PE"
               },
               {
                "planned_end": "2024-05-24",
                "duedate": "2024-06-24",
-               "components": "PE"
+               "components": "OE"
               }
             ]
 
