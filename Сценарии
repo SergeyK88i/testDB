@@ -1,3 +1,37 @@
+1/2
+В этой демонстрации мы наблюдаем:
+
+Список источников с рассчитанными ИИ индексами. Каждая запись показывает как числовые значения, так и подробные комментарии по каждому источнику.
+
+Мы выбираем интересующий нас источник из списка.
+
+Рассматриваем список критериев, по которым производился расчет индекса.
+
+Замечаем, что критерий 'интеграционное взаимодействие' имеет 0 баллов.
+
+Обращаемся к ИИ-агенту с вопросом о том, как повысить индекс.
+
+Получаем конкретные рекомендации от ИИ.
+
+идем выполнять рекомендации
+
+2/2
+В продолжении демонстрации мы видим:
+
+Выполнили все полученные рекомендаци от ИИ-агента ИЗИкс
+
+Возвращение в интерфейс ИЗИкс для проверки результатов
+
+Запуск процесса пересчета индекса
+
+Получение нового результата - 40 баллов
+
+Просмотр подробной детализации по начисленным 40 баллам, где наглядно представлен расчет по каждому критерию
+
+Обновление страницы и подтверждение актуализации данных на сайте в реальном времени
+
+Переход во вкладку 'История', где представлена наглядная динамика изменений индекса во времени
+
 Верхнеуровнево
 https://mermaid.live/edit#pako:eNp1VN1u2jAYfRXL14CaQPjJxaZJ3U9vqmrd1YALC9wWiSQohLUdQWqp1m7qpE7TpO2m26rtAbIOVgpteYXPb7TPToLoliABiY_POf6OP7tPG06TU5Nuu6yzQ16s1myCn02PuV4VPoo3cAcjcSbewQSuCVxBAHNxAHfisE6y2Qdkg7ldvmZ73Pb68FVhYxjhdwYTMRTvCdwi5QbGCrhFlfEgtAh_l_hSz4cf6IGUkPsLuTOYiVOfbDYclz9pO7tVuBDHSitATbkqzSTwTS4KLpXPFIIFVQ7WU6zOJShOZV0TcSiGWNWJWuLUJ-t8N9lMR7N0Yj21qpk4EifibZzKUmVrVsd1XqXUlke77zgyRcsbhYwQO0ZskuZ1EU2MnOboE8CtTzbazE42KaBJzAoWDAjSHL5ERSNbnPnkWavrOe5-sraB2vfmp4l-UJ2CbQNXBGcGcCUOMONLCHzylHWS1YumxLLhckNymv5_HTJXKmFzDuWTL0nMSnYqySa7z0hz-oQ-U3EUBoqFq_2SQa06jWTxMoqnsNAkOpLxAVDn7jnvdhy7y6vwUwV7g3PD-oLwlBEcHqpyh4uNjJr6nkCILPVgAhp3TgK0tPcJaLRvSZJx0glYFNM_SIjF7wpc53veo4bXcuw-nGN0fzC4U4In5A7mOaKuoWvVepcyyYeDOIWYFW9XuPPxJibPOpdJ-uSx3azCZwxZNRKe53Ec9wj_AnXh_FaB0wy1uGuxVhNv174UrVFvh1u8Rk18bPIt1mt7NVqzBziV9Txnc99uUNNzezxDXae3vUPNLdbu4luv02QeX20xvKWtxWiH2S8dx4op-ErNPt2jZlbT8rmVvF6saEa5qK9oxUKG7lNTL-YqRb1kVFbKZa1UyZeMQYa-VhJaTteNvKHpWqGAaKlgDP4CQ-sA_g
 
