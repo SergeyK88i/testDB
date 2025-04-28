@@ -1,3 +1,1148 @@
+graph TD
+    Start[Входящий запрос] --> ParseIntent{Определить намерение}
+    
+    ParseIntent -->|Узнать баллы| ScoreFlow[Сценарий 1: Проверка баллов]
+    ParseIntent -->|Новый источник| NewFlow[Сценарий 2: Новый источник]
+    ParseIntent -->|Улучшить баллы| ImproveFlow[Сценарий 3: Рекомендации]
+    ParseIntent -->|Сменить план| PlanFlow[Сценарий 4: Смена плана]
+    ParseIntent -->|Прогресс| HistoryFlow[Сценарий 5: Прогресс источника]
+    ParseIntent -->|Анализ разрыва| GapFlow[Сценарий 6: Gap-анализ]
+    ParseIntent -->|Проверка параметра| ParamFlow[Сценарий 7: Параметр]
+    ParseIntent -->|Документация| DocFlow[Сценарий 8: Документация]
+
+    ScoreFlow --> Response[Формирование ответа]
+    NewFlow --> Response
+    ImproveFlow --> Response
+    PlanFlow --> Response
+    HistoryFlow --> Response
+    GapFlow --> Response
+    ParamFlow --> Response
+    DocFlow --> Response
+
+    Response --> NextAction{Нужны доп. действия?}
+    NextAction -->|Да| ParseIntent
+    NextAction -->|Нет| End[Завершение диалога]
+
+--------------------------------------------------------------------------------------
+graph TD
+    %% Сценарий 1 - Запрос индекса зрелости
+    Start[Получен запрос индекса зрелости] --> ValidateSource{Валидация ID источника}
+    
+    ValidateSource -->|ID некорректный| ErrorResponse[Сообщить об ошибке формата]
+    ErrorResponse --> End1[Предложить начать оценку]
+    
+    ValidateSource -->|ID корректный| CheckSource{Проверка в SOURCES}
+    CheckSource -->|Не найден| NewSource[Предложить начать оценку]
+    
+    CheckSource -->|Найден| CheckScoreDate{Проверка даты расчета в SOURCE_SCORES_TOTAL}
+    
+    CheckScoreDate -->|Старее 24ч| SuggestRecalc[Предложить пересчет]
+    SuggestRecalc -->|Согласен| StartRecalc[Запустить пересчет]
+    SuggestRecalc -->|Отказ| ShowOldScore[Показать текущий балл с пометкой]
+    
+    CheckScoreDate -->|Актуален| ShowCurrentScore[Показать текущий балл]
+    
+    ShowCurrentScore --> WaitForDetails{Ожидание запроса деталей}
+    ShowOldScore --> WaitForDetails
+    
+    WaitForDetails -->|Запрошены детали| GetDetails[Получить SOURCE_SCORES_DETAILS]
+    GetDetails --> AnalyzeParams[Анализ параметров]
+    
+    AnalyzeParams --> ShowDetailedScore[Показать детальный расчет]
+    ShowDetailedScore --> CheckChanges{Проверка изменений в системах}
+    
+    CheckChanges -->|Есть изменения| OfferUpdate[Предложить обновление]
+    CheckChanges -->|Нет изменений| EndDetails[Завершить детализацию]
+    
+    OfferUpdate -->|Согласен| StartUpdate[Запустить пересчет]
+    OfferUpdate -->|Отказ| EndDetails
+---------------------------------------------------------------------------------------------------
+graph TD
+    %% Сценарий 2 - Новый источник
+    Start[Начало оценки нового источника] --> ValidateInput{Проверка входных данных}
+    
+    ValidateInput -->|Некорректные| RequestCorrect[Запросить корректные данные]
+    RequestCorrect --> ValidateInput
+    
+    ValidateInput -->|Корректные| CheckExisting{Проверка в SOURCES}
+    CheckExisting -->|Найден| SuggestUpdate[Предложить обновление существующего]
+    
+    CheckExisting -->|Не найден| PlanSelection[Показать описание планов A/B/C]
+    PlanSelection --> WaitPlan{Ожидание выбора плана}
+    
+    WaitPlan -->|План выбран| ValidatePlan{Проверка плана}
+    WaitPlan -->|Нужна помощь| ShowPlanDetails[Показать детали планов]
+    ShowPlanDetails --> WaitPlan
+    
+    ValidatePlan -->|Некорректный| PlanSelection
+    
+    ValidatePlan -->|Корректный| CreateSource[Создать запись в SOURCES]
+    CreateSource --> GetPlanParams[Получить параметры из PLAN_PARAMETERS]
+    
+    GetPlanParams --> InitParams[Инициализация параметров]
+    InitParams --> StartDialog[Начать диалог сбора данных]
+    
+    StartDialog --> CollectMeta[Сбор данных из META]
+    CollectMeta --> CollectDialog[Сбор данных через диалог]
+    
+    CollectDialog --> ValidateCollected{Проверка собранных данных}
+    ValidateCollected -->|Неполные| IdentifyMissing[Определить недостающие]
+    IdentifyMissing --> CollectDialog
+    
+    ValidateCollected -->|Полные| CalculateInitial[Расчет начальных баллов]
+    CalculateInitial --> SaveScores[Сохранение в SOURCE_SCORES]
+    
+    SaveScores --> ShowResults[Показать результаты]
+    ShowResults --> OfferNext{Предложить следующие шаги}
+    
+    OfferNext -->|Улучшение| StartImprovement[Начать сценарий улучшения]
+    OfferNext -->|Документация| ShowDocs[Показать документацию]
+    OfferNext -->|Завершить| End[Завершение оценки]
+------------------------------------------------------------------------------------------
+graph TD
+    %% Сценарий 3 - Запрос улучшений
+    Start[Запрос улучшений] --> ValidateSource{Проверка источника}
+    
+    ValidateSource -->|Не найден| ErrorSource[Сообщить об отсутствии источника]
+    ErrorSource --> OfferStart[Предложить начать оценку]
+    
+    ValidateSource -->|Найден| GetCurrentPlan[Получить текущий план из SOURCES]
+    GetCurrentPlan --> LoadScores[Загрузка SOURCE_SCORES_DETAILS]
+    
+    LoadScores --> AnalyzeScores[Анализ текущих баллов]
+    AnalyzeScores --> GetWeights[Получение весов из EVALUATION_PARAMETERS]
+    
+    GetWeights --> PrioritizeImprovements[Приоритизация улучшений]
+    PrioritizeImprovements --> SortByWeight[Сортировка по весу параметров]
+    
+    SortByWeight --> FilterByPlan{Фильтрация по плану}
+    FilterByPlan --> IdentifyQuickWins[Определение быстрых улучшений]
+    
+    IdentifyQuickWins --> CreateRoadmap[Создание дорожной карты]
+    CreateRoadmap --> GenerateRecommendations[Генерация рекомендаций]
+    
+    GenerateRecommendations --> ShowPrioritized[Показ приоритетных действий]
+    ShowPrioritized --> OfferDetails{Предложить детали}
+    
+    OfferDetails -->|Документация| ShowDocs[Показать документацию]
+    OfferDetails -->|Консультация| OfferHelp[Предложить помощь]
+    OfferDetails -->|План действий| ShowActionPlan[Показать пошаговый план]
+    
+    ShowDocs --> WaitForAction{Ожидание выбора действия}
+    OfferHelp --> WaitForAction
+    ShowActionPlan --> WaitForAction
+    
+    WaitForAction -->|Выбрано действие| StartImplementation[Начать реализацию]
+    WaitForAction -->|Отложить| ScheduleReminder[Запланировать напоминание]
+    
+    StartImplementation --> TrackProgress[Отслеживание прогресса]
+    ScheduleReminder --> End[Завершение сценария]
+    TrackProgress --> End
+-----------------------------------------------------------------------------------
+graph TD
+    %% Сценарий 4 - Смена плана интеграции
+    Start[Запрос смены плана] --> ValidateSource{Проверка источника}
+    
+    ValidateSource -->|Не найден| ErrorSource[Сообщить об ошибке]
+    ValidateSource -->|Найден| GetCurrentPlan[Получить текущий план]
+    
+    GetCurrentPlan --> ValidateNewPlan{Проверка нового плана}
+    ValidateNewPlan -->|Некорректный| RequestValidPlan[Запросить корректный план]
+    
+    ValidateNewPlan -->|Корректный| ComparePlans[Сравнение планов]
+    ComparePlans --> LoadCurrentParams[Загрузка текущих параметров]
+    
+    LoadCurrentParams --> LoadNewParams[Загрузка параметров нового плана]
+    LoadNewParams --> AnalyzeDifference[Анализ различий]
+    
+    AnalyzeDifference --> CalculateGap[Расчёт разрыва]
+    CalculateGap --> PrepareReport[Подготовка отчёта изменений]
+    
+    PrepareReport --> ShowChanges[Показать изменения]
+    ShowChanges --> ConfirmChange{Подтверждение смены}
+    
+    ConfirmChange -->|Отмена| End[Завершение без изменений]
+    ConfirmChange -->|Подтверждено| UpdatePlan[Обновление плана в SOURCES]
+    
+    UpdatePlan --> RecalculateScores[Пересчёт баллов]
+    RecalculateScores --> UpdateScores[Обновление SOURCE_SCORES]
+    
+    UpdateScores --> GenerateTaskList[Генерация списка задач]
+    GenerateTaskList --> ShowNewRequirements[Показ новых требований]
+    
+    ShowNewRequirements --> OfferAssistance{Предложить помощь}
+    OfferAssistance -->|Документация| ProvideDocs[Предоставить документацию]
+    OfferAssistance -->|Консультация| ScheduleCall[Запланировать созвон]
+    OfferAssistance -->|Самостоятельно| EndChange[Завершение смены плана]
+    
+    ProvideDocs --> TrackProgress[Отслеживание прогресса]
+    ScheduleCall --> TrackProgress
+    TrackProgress --> EndChange
+-----------------------------------------------------------------------------------
+graph TD
+    %% Сценарий 5 - История изменений
+    Start[Запрос истории] --> ValidateSource{Проверка источника}
+    
+    ValidateSource -->|Не найден| ErrorSource[Сообщить об ошибке]
+    ValidateSource -->|Найден| GetDateRange[Получить период анализа]
+    
+    GetDateRange --> ValidateRange{Проверка периода}
+    ValidateRange -->|Некорректный| RequestValidRange[Запросить корректный период]
+    ValidateRange -->|Корректный| LoadHistory[Загрузка SOURCE_SCORES_TOTAL]
+    
+    LoadHistory --> AnalyzeChanges[Анализ изменений]
+    AnalyzeChanges --> DetectTrends[Определение трендов]
+    
+    DetectTrends --> LoadDetails[Загрузка SOURCE_SCORES_DETAILS]
+    LoadDetails --> AnalyzeParameters[Анализ изменений параметров]
+    
+    AnalyzeParameters --> GenerateReport[Генерация отчёта]
+    GenerateReport --> ShowSummary[Показать сводку]
+    
+    ShowSummary --> OfferDetails{Предложить детализацию}
+    OfferDetails -->|По параметрам| ShowParamHistory[История по параметрам]
+    OfferDetails -->|По периодам| ShowPeriodHistory[История по периодам]
+    OfferDetails -->|По событиям| ShowEventHistory[История по событиям]
+    
+    ShowParamHistory --> AnalyzeSpecific[Анализ конкретных изменений]
+    ShowPeriodHistory --> AnalyzeSpecific
+    ShowEventHistory --> AnalyzeSpecific
+    
+    AnalyzeSpecific --> OfferInsights{Предложить инсайты}
+    OfferInsights -->|Рекомендации| ShowRecommendations[Показать рекомендации]
+    OfferInsights -->|Прогноз| ShowForecast[Показать прогноз]
+    OfferInsights -->|Сравнение| ShowComparison[Сравнить с другими]
+    
+    ShowRecommendations --> EndReport[Завершение отчёта]
+    ShowForecast --> EndReport
+    ShowComparison --> EndReport
+--------------------------------------------------------------------------
+graph TD
+    %% Сценарий 6 - Анализ разрыва
+    Start[Запрос анализа разрыва] --> ValidateSource{Проверка источника}
+    
+    ValidateSource -->|Найден| GetCurrentPlan[Получить текущий план]
+    ValidateSource -->|Не найден| ErrorSource[Сообщить об ошибке]
+    
+    GetCurrentPlan --> LoadThresholds[Загрузка пороговых значений]
+    LoadThresholds --> LoadCurrentScores[Загрузка текущих баллов]
+    
+    LoadCurrentScores --> CalculateGaps[Расчёт разрывов]
+    CalculateGaps --> PrioritizeGaps[Приоритизация разрывов]
+    
+    PrioritizeGaps --> AnalyzeEffort[Анализ трудозатрат]
+    AnalyzeEffort --> CalculateROI[Расчёт эффективности]
+    
+    CalculateROI --> GenerateRoadmap[Создание дорожной карты]
+    GenerateRoadmap --> ShowGapAnalysis[Показать анализ разрывов]
+    
+    ShowGapAnalysis --> OfferDetails{Предложить детализацию}
+    OfferDetails -->|По параметрам| ShowParamGaps[Разрывы по параметрам]
+    OfferDetails -->|По приоритетам| ShowPriorityGaps[Разрывы по приоритетам]
+    OfferDetails -->|По сложности| ShowComplexityGaps[Разрывы по сложности]
+    
+    ShowParamGaps --> GenerateActionPlan[Генерация плана действий]
+    ShowPriorityGaps --> GenerateActionPlan
+    ShowComplexityGaps --> GenerateActionPlan
+    
+    GenerateActionPlan --> OfferSupport{Предложить поддержку}
+    OfferSupport -->|Документация| ProvideDocs[Предоставить документацию]
+    OfferSupport -->|Консультация| ScheduleConsult[Запланировать консультацию]
+    OfferSupport -->|План работ| CreateWorkPlan[Создать план работ]
+    
+    ProvideDocs --> TrackProgress[Отслеживание прогресса]
+    ScheduleConsult --> TrackProgress
+    CreateWorkPlan --> TrackProgress
+    
+    TrackProgress --> EndAnalysis[Завершение анализа]
+--------------------------------------------------------------------------------
+graph TD
+    %% Сценарий 7 - Проверка параметра
+    Start[Запрос проверки параметра] --> ValidateParam{Проверка параметра}
+    
+    ValidateParam -->|Некорректный| ShowValidParams[Показать список параметров]
+    ValidateParam -->|Корректный| CheckSource{Проверка источника}
+    
+    CheckSource -->|Не найден| ErrorSource[Сообщить об ошибке]
+    CheckSource -->|Найден| GetParamDetails[Получить детали параметра]
+    
+    GetParamDetails --> CheckParamSource{Проверка источника данных}
+    CheckParamSource -->|META| LoadMetaParam[Загрузка из META_PARAMS]
+    CheckParamSource -->|DIALOG| LoadDialogParam[Загрузка из DIALOG_PARAMS]
+    
+    LoadMetaParam --> ValidateValue{Проверка значения}
+    LoadDialogParam --> ValidateValue
+    
+    ValidateValue -->|Отсутствует| CheckRequired{Проверка обязательности}
+    ValidateValue -->|Присутствует| AnalyzeValue[Анализ значения]
+    
+    CheckRequired -->|Обязательный| SuggestCollection[Предложить сбор данных]
+    CheckRequired -->|Опциональный| ShowStatus[Показать текущий статус]
+    
+    AnalyzeValue --> CompareThreshold[Сравнение с порогом]
+    CompareThreshold --> GenerateInsights[Генерация инсайтов]
+    
+    GenerateInsights --> ShowAnalysis[Показать анализ]
+    ShowAnalysis --> OfferActions{Предложить действия}
+    
+    OfferActions -->|Улучшение| SuggestImprovement[Предложить улучшения]
+    OfferActions -->|Документация| ShowDocs[Показать документацию]
+    OfferActions -->|Консультация| OfferHelp[Предложить помощь]
+    
+    SuggestImprovement --> TrackParameter[Отслеживание параметра]
+    ShowDocs --> TrackParameter
+    OfferHelp --> TrackParameter
+    
+    TrackParameter --> EndCheck[Завершение проверки]
+-----------------------------------------------------------------------------
+graph TD
+    %% Сценарий 8 - Запрос документации
+    Start[Запрос документации] --> ParseRequest[Анализ запроса]
+    
+    ParseRequest --> IdentifyTopic{Определение темы}
+    IdentifyTopic -->|Параметр| LoadParamDocs[Загрузка документации параметра]
+    IdentifyTopic -->|План| LoadPlanDocs[Загрузка документации плана]
+    IdentifyTopic -->|Процесс| LoadProcessDocs[Загрузка документации процесса]
+    
+    LoadParamDocs --> ValidateContext{Проверка контекста}
+    LoadPlanDocs --> ValidateContext
+    LoadProcessDocs --> ValidateContext
+    
+    ValidateContext -->|Источник есть| CustomizeDocs[Персонализация документации]
+    ValidateContext -->|Общий запрос| PrepareGeneral[Подготовка общих материалов]
+    
+    CustomizeDocs --> AddExamples[Добавление примеров]
+    PrepareGeneral --> AddExamples
+    
+    AddExamples --> FormatContent[Форматирование контента]
+    FormatContent --> StructureResponse[Структурирование ответа]
+    
+    StructureResponse --> ShowDocs[Показать документацию]
+    ShowDocs --> OfferMore{Предложить дополнительно}
+    
+    OfferMore -->|Примеры| ShowExamples[Показать примеры]
+    OfferMore -->|Детали| ShowDetails[Показать детали]
+    OfferMore -->|Консультация| OfferSupport[Предложить поддержку]
+    
+    ShowExamples --> CheckUnderstanding{Проверка понимания}
+    ShowDetails --> CheckUnderstanding
+    OfferSupport --> CheckUnderstanding
+    
+    CheckUnderstanding -->|Понятно| EndDocs[Завершение]
+    CheckUnderstanding -->|Нужны пояснения| ClarifyDocs[Уточнение информации]
+    
+    ClarifyDocs --> ShowDocs
+----------------------------------------------------------------------------------------
+graph TD
+    Start[Входящий запрос] --> Intent{Определение намерения}
+    
+    Intent -->|Проверка баллов| Scenario1[Сценарий 1: Запрос индекса]
+    Intent -->|Новый источник| Scenario2[Сценарий 2: Новый источник]
+    Intent -->|Улучшение| Scenario3[Сценарий 3: Улучшения]
+    Intent -->|Смена плана| Scenario4[Сценарий 4: Смена плана]
+    Intent -->|История| Scenario5[Сценарий 5: История]
+    Intent -->|Разрыв| Scenario6[Сценарий 6: Анализ разрыва]
+    Intent -->|Параметр| Scenario7[Сценарий 7: Проверка параметра]
+    Intent -->|Документация| Scenario8[Сценарий 8: Документация]
+    
+    Scenario1 --> NextAction1{Следующее действие}
+    Scenario2 --> NextAction2{Следующее действие}
+    Scenario3 --> NextAction3{Следующее действие}
+    Scenario4 --> NextAction4{Следующее действие}
+    Scenario5 --> NextAction5{Следующее действие}
+    Scenario6 --> NextAction6{Следующее действие}
+    Scenario7 --> NextAction7{Следующее действие}
+    Scenario8 --> NextAction8{Следующее действие}
+    
+    NextAction1 -->|Улучшение| Scenario3
+    NextAction1 -->|Документация| Scenario8
+    
+    NextAction2 -->|Проверка| Scenario7
+    NextAction2 -->|Документация| Scenario8
+    
+    NextAction3 -->|Смена плана| Scenario4
+    NextAction3 -->|Параметр| Scenario7
+    
+    NextAction4 -->|Анализ разрыва| Scenario6
+    NextAction4 -->|История| Scenario5
+    
+    NextAction5 -->|Улучшение| Scenario3
+    NextAction5 -->|Разрыв| Scenario6
+    
+    NextAction6 -->|Документация| Scenario8
+    NextAction6 -->|Параметр| Scenario7
+    
+    NextAction7 -->|История| Scenario5
+    NextAction7 -->|Документация| Scenario8
+    
+    NextAction8 -->|Проверка| Scenario7
+    NextAction8 -->|Улучшение| Scenario3
+    
+    %% Общие действия для всех сценариев
+    NextAction1 -->|Завершить| End[Завершение диалога]
+    NextAction2 -->|Завершить| End
+    NextAction3 -->|Завершить| End
+    NextAction4 -->|Завершить| End
+    NextAction5 -->|Завершить| End
+    NextAction6 -->|Завершить| End
+    NextAction7 -->|Завершить| End
+    NextAction8 -->|Завершить| End
+----------------------------------------------------------------------------
+sequenceDiagram
+    actor User
+    participant AI_Agent as AI агент
+    participant Data_API as Data API
+    participant Confluence as Confluence
+    participant DB as База данных
+    participant Meta as META система
+    participant Calculator as Калькулятор индекса
+
+    User->>AI_Agent: Запрос индекса зрелости
+    AI_Agent->>Data_API: GET /source/{sourceName}
+    Data_API->>DB: Проверка существования источника
+    DB-->>Data_API: Результат проверки
+    Data_API-->>AI_Agent: Результат проверки
+
+    alt Источник не найден
+        AI_Agent->>User: Запрос названия сервиса
+        User->>AI_Agent: Название сервиса
+        AI_Agent->>Data_API: POST /source
+        Data_API->>DB: Создание записи в SOURCES
+    end
+
+    AI_Agent->>Data_API: GET /source/{sourceName}/plan
+    Data_API->>DB: Получение плана интеграции
+    Data_API-->>AI_Agent: План интеграции
+
+    AI_Agent->>Data_API: GET /parameters/{planId}
+    Data_API->>DB: Получение списка параметров
+    Data_API-->>AI_Agent: Список параметров
+
+    AI_Agent->>Confluence: GET /questionnaire/{sourceName}
+    
+    alt Опросный лист найден
+        Confluence-->>AI_Agent: Данные опросного листа
+        AI_Agent->>DB: Получение данных
+        
+        alt Данные в БД актуальны
+            DB-->>AI_Agent: Актуальные данные из БД
+        else Данные отсутствуют или устарели
+            AI_Agent->>Meta: Запрос данных
+            Meta-->>AI_Agent: Данные из META
+        end
+        
+        AI_Agent->>AI_Agent: Выбор значений для расчета
+    end
+
+    par Сбор данных
+        AI_Agent->>Data_API: POST /dialog-params
+        Data_API->>DB: Сохранение ответов в DIALOG_PARAMS
+        AI_Agent->>Data_API: GET /meta-params/{sourceName}
+        Data_API->>Meta: Запрос параметров
+        Meta-->>Data_API: Данные из META
+        Data_API->>DB: Сохранение в META_PARAMS
+    end
+
+    AI_Agent->>Data_API: GET /evaluation-parameters
+    Data_API->>DB: Получение весов параметров
+    Data_API-->>AI_Agent: Веса параметров
+
+    AI_Agent->>Calculator: POST /calculate-index
+    Calculator->>Calculator: Расчет индекса
+    Calculator-->>AI_Agent: Результат расчета
+
+    AI_Agent->>AI_Agent: Анализ результата
+    AI_Agent->>Data_API: POST /scores
+    Data_API->>DB: Сохранение оценок и итогового балла
+
+    AI_Agent->>Data_API: POST /dialog-history
+    Data_API->>DB: Сохранение истории диалога
+
+    AI_Agent->>User: Ответ с интерпретацией индекса зрелости
+------------------------------------------------------------------------------
+sequenceDiagram
+    actor User
+    participant Router_Agent as Router Agent
+    participant Action_Agent as Action Agent
+    participant Collector_Agent as Collector Agent
+    participant Validator_Agent as Validator Agent
+    participant Response_Agent as Response Agent
+    participant Data_API as Data API
+    participant Confluence as Confluence
+    participant DB as База данных
+    participant Meta as META система
+    participant Calculator as Калькулятор индекса
+
+    User->>Router_Agent: Запрос индекса зрелости
+    
+    Router_Agent->>Router_Agent: Определение сценария
+    Router_Agent->>Router_Agent: Выбор цепочки агентов
+    Router_Agent->>Action_Agent: Передача управления
+    
+    Action_Agent->>Action_Agent: Определение необходимых данных
+    Action_Agent->>Collector_Agent: Запрос на сбор данных
+    
+    Collector_Agent->>Data_API: GET /source/{sourceName}
+    Data_API->>DB: Проверка источника
+    DB-->>Data_API: Результат
+    Data_API-->>Collector_Agent: Данные источника
+    
+    Collector_Agent->>Confluence: GET /confluence/questionnaire/data/{sourceName}
+    Confluence-->>Collector_Agent: Данные опросного листа
+    
+    Collector_Agent->>Meta: GET /meta/source/{sourceName}/parameters
+    Meta-->>Collector_Agent: Мета-данные
+    
+    Collector_Agent->>Validator_Agent: Передача собранных данных
+    
+    Validator_Agent->>Validator_Agent: Проверка полноты данных
+    Validator_Agent->>Validator_Agent: Валидация значений
+    Validator_Agent->>Validator_Agent: Проверка актуальности
+    
+    Validator_Agent->>Action_Agent: Передача валидных данных
+    
+    Action_Agent->>Calculator: POST /calculate-index
+    Calculator-->>Action_Agent: Результат расчета
+    
+    Action_Agent->>Response_Agent: Передача результатов
+    
+    Response_Agent->>Response_Agent: Форматирование результата
+    Response_Agent->>Response_Agent: Добавление рекомендаций
+    Response_Agent->>User: Ответ с интерпретацией индекса
+-------------------------------------------------------------------------
+sequenceDiagram
+    actor User
+    participant AI_Agent as AI агент
+    participant Data_API as Data API
+    participant Confluence as Confluence
+    participant DB as База данных
+    participant Meta as META система
+    participant Calculator as Калькулятор индекса
+
+    User->>AI_Agent: Запрос индекса зрелости
+    AI_Agent->>Data_API: GET /source/{sourceName}
+    Data_API->>DB: Проверка существования источника
+    DB-->>Data_API: Результат проверки
+    Data_API-->>AI_Agent: Результат проверки
+
+    rect rgb(191, 223, 255)
+    alt Источник не найден
+        AI_Agent->>User: Запрос названия сервиса
+        User->>AI_Agent: Название сервиса
+        AI_Agent->>Data_API: POST /source
+        Data_API->>DB: Создание записи в SOURCES
+    end
+    end
+
+    AI_Agent->>Data_API: GET /source/{sourceName}/plan
+    Data_API->>DB: Получение плана интеграции
+    Data_API-->>AI_Agent: План интеграции
+
+    AI_Agent->>Data_API: GET /parameters/{planId}
+    Data_API->>DB: Получение списка параметров
+    Data_API-->>AI_Agent: Список параметров
+
+    AI_Agent->>Confluence: GET /confluence/questionnaire/data/{sourceName}
+
+    rect rgb(191, 223, 255)
+    alt Опросный лист найден
+        Confluence-->>AI_Agent: GET /confluence/questionnaire/data/{sourceName}
+        AI_Agent->>DB: GET /source/{sourceName}/parameters
+        
+        rect rgb(255, 220, 220)
+        alt Данные в БД актуальны
+            DB-->>AI_Agent: Актуальные данные из БД
+        end
+        end
+        
+        rect rgb(255, 220, 220)
+        alt Данные отсутствуют или устарели
+            AI_Agent->>Meta: GET /meta/source/{sourceName}/parameters
+            Meta-->>AI_Agent: Данные из META
+        end
+        end
+        
+        AI_Agent->>AI_Agent: Формирование финального набора параметров
+    end
+    end
+
+    rect rgb(220, 190, 255)
+    par Сбор данных
+        AI_Agent->>Data_API: POST /dialog-params
+        Data_API->>DB: Сохранение ответов в DIALOG_PARAMS
+        AI_Agent->>Data_API: GET /meta-params/{sourceName}
+        Data_API->>Meta: Запрос параметров
+        Meta-->>Data_API: Данные из META
+        Data_API->>DB: Сохранение в META_PARAMS
+    end
+    end
+
+    AI_Agent->>Data_API: GET /evaluation-parameters
+    Data_API->>DB: Получение весов параметров
+    Data_API-->>AI_Agent: Веса параметров
+
+    AI_Agent->>Calculator: POST /calculate-index
+    Calculator->>Calculator: Расчет индекса
+    Calculator-->>AI_Agent: Результат расчета
+
+    AI_Agent->>AI_Agent: Анализ результата
+    AI_Agent->>Data_API: POST /scores
+    Data_API->>DB: Сохранение оценок и итогового балла
+
+    AI_Agent->>Data_API: POST /dialog-history
+    Data_API->>DB: Сохранение истории диалога
+
+    AI_Agent->>User: Ответ с интерпретацией индекса зрелости
+-----------------------------------------------------------------------------
+flowchart TD
+    A["Запрос оценки готовности источника"] --> B{"Есть КЭ источника?"}
+    B -->|Да| C{"Найдена информация\nв БД по КЭ?"}
+    B -->|Нет| D["Запросить КЭ у пользователя"]
+    D --> B
+    
+    C -->|Да| E["UC-1: Запуск оценки\nготовности источника"]
+    C -->|Нет| F{"Есть план загрузки?"}
+    
+    F -->|Да| G["UC-1.1: Извлечение списка\nкритериев из БД"]
+    F -->|Нет| H["Запросить план загрузки\nу пользователя"]
+    H --> F
+    
+    G --> G1{"БД доступна?"}
+    G1 -->|Да| G2{"Критерии найдены?"}
+    G1 -->|Нет| G3["Уведомление о проблеме\nдоступа к БД"]
+    G3 --> Z["Завершение с ошибкой"]
+    
+    G2 -->|Да| I["Сбор данных для критериев"]
+    G2 -->|Нет| G4["Уведомление об отсутствии\nкритериев оценки"]
+    G4 --> Z
+    
+    I --> J["UC-3: Сбор критериев\nиз внешних систем"]
+    I --> K["UC-5: Сбор данных\nиз опросного листа"]
+    
+    J --> J1{"Соединение с\nисточником данных?"}
+    J1 -->|Да| J2{"Данные найдены?"}
+    J1 -->|Нет| J3["Уведомление о проблеме\nдоступа к источнику"]
+    J3 --> J5["Предложение альтернативных\nисточников данных"]
+    
+    J2 -->|Да| J4["Сохранение данных\nдля расчета"]
+    J2 -->|Нет| J6["Уведомление об\nотсутствии данных"]
+    J6 --> J5
+    J5 --> I
+    J4 --> L
+    
+    K --> K1{"Опросный лист\nна сайте?"}
+    K1 -->|Да| K2{"Опросный лист\nзаполнен?"}
+    K1 -->|Нет| K3{"Ссылка на Confluence\nпредоставлена?"}
+    
+    K2 -->|Да| K4["Извлечение данных\nиз опросного листа"]
+    K2 -->|Нет| K5["Запрос на заполнение\nопросного листа"]
+    K5 --> K1
+    
+    K3 -->|Да| K6{"Ссылка корректна\nи доступна?"}
+    K3 -->|Нет| K7["Запрос корректной\nссылки"]
+    K7 --> K3
+    
+    K6 -->|Да| K8["Извлечение данных\nиз Confluence"]
+    K6 -->|Нет| K9["Уведомление о проблеме\nс доступом к Confluence"]
+    K9 --> K7
+    
+    K4 --> L["Расчет индекса\nготовности"]
+    K8 --> L
+    
+    E --> L
+    
+    L --> M{"Пользователь согласен\nс оценкой?"}
+    
+    M -->|Да| N["Сохранение результатов"]
+    M -->|Нет| O["UC-4: Обоснование\nоценки"]
+    
+    O --> O1{"Параметр найден\nв базе оценок?"}
+    O1 -->|Да| O2["Формирование объяснения\nс критериями и источниками"]
+    O1 -->|Нет| O3["Уведомление о невозможности\nпредоставить объяснение"]
+    O3 --> O4["Предложение списка\nдоступных параметров"]
+    O4 --> O
+    
+    O2 --> P{"Пользователь предоставил\nдополнительные данные?"}
+    
+    P -->|Да| P1["Анализ новых данных"]
+    P1 --> P2{"Данные подтверждены?"}
+    P2 -->|Да| Q["Пересчет оценки\nпараметра"]
+    P2 -->|Нет| O2
+    
+    P -->|Нет| R["UC-2: Рекомендации по\nповышению индекса"]
+    
+    R --> R1{"Готовые рекомендации\nдоступны?"}
+    R1 -->|Да| R2["Формирование конкретных\nинструкций по улучшению"]
+    R1 -->|Нет| R3{"Анализ документации\nвозможен?"}
+    
+    R3 -->|Да| R4["Анализ текущих\nпоказателей и документации"]
+    R3 -->|Нет| R5["Предложение консультации\nс экспертом"]
+    
+    R4 --> R2
+    R5 --> N
+    R2 --> N
+    
+    Q --> N
+    
+    N --> S["Ожидание дальнейших\nзапросов пользователя"]
+-----------------------------------------------------------------------------------
+flowchart TD
+    A["Запрос оценки готовности источника"] --> B{"Есть КЭ источника?"}
+    B -->|Да| C{"Найдена информация\nв БД по КЭ?"}
+    B -->|Нет| D["Запросить КЭ у пользователя"]
+    D --> B
+    
+    C -->|Да| E["UC-1: Запуск оценки\nготовности источника"]
+    C -->|Нет| F["Запрос базовой информации\nоб источнике"]
+    
+    F --> G["Регистрация нового источника\nв системе"]
+    G --> H["Создание плана загрузки\nдля нового источника"]
+    H --> I["UC-1.1: Извлечение списка\nкритериев из БД"]
+    
+    E --> J{"План загрузки актуален?"}
+    J -->|Да| I
+    J -->|Нет| K["Обновление плана загрузки"]
+    K --> I
+    
+    I --> I1{"БД доступна?"}
+    I1 -->|Да| I2{"Критерии найдены?"}
+    I1 -->|Нет| I3["Уведомление о проблеме\nдоступа к БД"]
+    I3 --> Z["Завершение с ошибкой"]
+    
+    I2 -->|Да| L["Сбор данных для критериев"]
+    I2 -->|Нет| I4["Уведомление об отсутствии\nкритериев оценки"]
+    I4 --> Z
+    
+    L --> M["UC-3: Сбор критериев\nиз внешних систем"]
+    L --> N["UC-5: Сбор данных\nиз опросного листа"]
+    
+    M --> M1{"Соединение с\nисточником данных?"}
+    M1 -->|Да| M2{"Данные найдены?"}
+    M1 -->|Нет| M3["Уведомление о проблеме\nдоступа к источнику"]
+    M3 --> M5["Предложение альтернативных\nисточников данных"]
+    
+    M2 -->|Да| M4["Сохранение данных\nдля расчета"]
+    M2 -->|Нет| M6["Уведомление об\nотсутствии данных"]
+    M6 --> M5
+    M5 --> L
+    M4 --> O
+    
+    N --> N1{"Опросный лист\nна сайте?"}
+    N1 -->|Да| N2{"Опросный лист\nзаполнен?"}
+    N1 -->|Нет| N3{"Ссылка на Confluence\nпредоставлена?"}
+    
+    N2 -->|Да| N4["Извлечение данных\nиз опросного листа"]
+    N2 -->|Нет| N5["Запрос на заполнение\nопросного листа"]
+    N5 --> N1
+    
+    N3 -->|Да| N6{"Ссылка корректна\nи доступна?"}
+    N3 -->|Нет| N7["Запрос корректной\nссылки"]
+    N7 --> N3
+    
+    N6 -->|Да| N8["Извлечение данных\nиз Confluence"]
+    N6 -->|Нет| N9["Уведомление о проблеме\nс доступом к Confluence"]
+    N9 --> N7
+    
+    N4 --> O["Расчет индекса\nготовности"]
+    N8 --> O
+    
+    O --> P{"Пользователь согласен\nс оценкой?"}
+    
+    P -->|Да| Q["Сохранение результатов"]
+    P -->|Нет| R["UC-4: Обоснование\nоценки"]
+    
+    R --> R1{"Параметр найден\nв базе оценок?"}
+    R1 -->|Да| R2["Формирование объяснения\nс критериями и источниками"]
+    R1 -->|Нет| R3["Уведомление о невозможности\nпредоставить объяснение"]
+    R3 --> R4["Предложение списка\nдоступных параметров"]
+    R4 --> R
+    
+    R2 --> S{"Пользователь предоставил\nдополнительные данные?"}
+    
+    S -->|Да| S1["Анализ новых данных"]
+    S1 --> S2{"Данные подтверждены?"}
+    S2 -->|Да| T["Пересчет оценки\nпараметра"]
+    S2 -->|Нет| R2
+    
+    S -->|Нет| U["UC-2: Рекомендации по\nповышению индекса"]
+    
+    U --> U1{"Готовые рекомендации\nдоступны?"}
+    U1 -->|Да| U2["Формирование конкретных\nинструкций по улучшению"]
+    U1 -->|Нет| U3{"Анализ документации\nвозможен?"}
+    
+    U3 -->|Да| U4["Анализ текущих\nпоказателей и документации"]
+    U3 -->|Нет| U5["Предложение консультации\nс экспертом"]
+    
+    U4 --> U2
+    U5 --> Q
+    U2 --> Q
+    
+    T --> Q
+    
+    Q --> V["Ожидание дальнейших\nзапросов пользователя"]
+--------------------------------------------------------------------------------
+flowchart TD
+    A["Запрос оценки готовности источника"] --> B{"Есть КЭ источника?"}
+    B -->|Да| C{"Найдена информация\nв БД по КЭ?"}
+    B -->|Нет| D["Запросить КЭ у пользователя"]
+    D --> B
+    
+    C -->|Да| E["UC-1: Запуск оценки\nготовности источника"]
+    C -->|Нет| F["Запрос базовой информации\nоб источнике"]
+    
+    F --> G["Регистрация нового источника\nв системе"]
+    G --> E
+    
+    E --> J{"План загрузки актуален?"}
+    J -->|Да| I["UC-1.1: Извлечение списка\nкритериев из БД"]
+    J -->|Нет| K["Обновление плана загрузки"]
+    K --> I
+    
+    I --> I1{"БД доступна?"}
+    I1 -->|Да| I2{"Критерии найдены?"}
+    I1 -->|Нет| I3["Уведомление о проблеме\nдоступа к БД"]
+    I3 --> Z["Завершение с ошибкой"]
+    
+    I2 -->|Да| L["Сбор данных для критериев"]
+    I2 -->|Нет| I4["Уведомление об отсутствии\nкритериев оценки"]
+    I4 --> Z
+    
+    L --> M["UC-3: Сбор критериев\nиз внешних систем"]
+    L --> N["UC-5: Сбор данных\nиз опросного листа"]
+    
+    M --> M1{"Соединение с\nисточником данных?"}
+    M1 -->|Да| M2{"Данные найдены?"}
+    M1 -->|Нет| M3["Уведомление о проблеме\nдоступа к источнику"]
+    M3 --> M5["Предложение альтернативных\nисточников данных"]
+    
+    M2 -->|Да| M4["Сохранение данных\nдля расчета"]
+    M2 -->|Нет| M6["Уведомление об\nотсутствии данных"]
+    M6 --> M5
+    M5 --> L
+    M4 --> O
+    
+    N --> N1{"Опросный лист\nна сайте?"}
+    N1 -->|Да| N2{"Опросный лист\nзаполнен?"}
+    N1 -->|Нет| N3{"Ссылка на Confluence\nпредоставлена?"}
+    
+    N2 -->|Да| N4["Извлечение данных\nиз опросного листа"]
+    N2 -->|Нет| N5["Запрос на заполнение\nопросного листа"]
+    N5 --> N1
+    
+    N3 -->|Да| N6{"Ссылка корректна\nи доступна?"}
+    N3 -->|Нет| N7["Запрос корректной\nссылки"]
+    N7 --> N3
+    
+    N6 -->|Да| N8["Извлечение данных\nиз Confluence"]
+    N6 -->|Нет| N9["Уведомление о проблеме\nс доступом к Confluence"]
+    N9 --> N7
+    
+    N4 --> O["Расчет индекса\nготовности"]
+    N8 --> O
+    
+    O --> P{"Пользователь согласен\nс оценкой?"}
+    
+    P -->|Да| Q["Сохранение результатов"]
+    P -->|Нет| R["UC-4: Обоснование\nоценки"]
+    
+    Q --> S{"Пользователь хочет\nполучить рекомендации?"}
+    S -->|Да| U["UC-2: Рекомендации по\nповышению индекса"]
+    S -->|Нет| V["Ожидание дальнейших\nзапросов пользователя"]
+    
+    R --> R1{"Параметр найден\nв базе оценок?"}
+    R1 -->|Да| R2["Формирование объяснения\nс критериями и источниками"]
+    R1 -->|Нет| R3["Уведомление о невозможности\nпредоставить объяснение"]
+    R3 --> R4["Предложение списка\nдоступных параметров"]
+    R4 --> R
+    
+    R2 --> T{"Пользователь предоставил\nдополнительные данные?"}
+    
+    T -->|Да| T1["Анализ новых данных"]
+    T1 --> T2{"Данные подтверждены?"}
+    T2 -->|Да| T3["Пересчет оценки\nпараметра"]
+    T2 -->|Нет| R2
+    
+    T -->|Нет| U
+    
+    U --> U1{"Готовые рекомендации\nдоступны?"}
+    U1 -->|Да| U2["Формирование конкретных\nинструкций по улучшению"]
+    U1 -->|Нет| U3{"Анализ документации\nвозможен?"}
+    
+    U3 -->|Да| U4["Анализ текущих\nпоказателей и документации"]
+    U3 -->|Нет| U5["Предложение консультации\nс экспертом"]
+    
+    U4 --> U2
+    U5 --> Q
+    U2 --> Q
+    
+    T3 --> Q
+-----------------------------------------------------------------------------
+flowchart TD
+    A["Запрос оценки готовности источника"] --> B{"Есть КЭ источника?"}
+    B -->|Да| C{"Найдена информация\nв БД по КЭ?"}
+    B -->|Нет| D["Запросить КЭ у пользователя"]
+    D --> B
+    
+    C -->|Да| E["UC-1: Запуск оценки\nготовности источника"]
+    C -->|Нет| F["Запрос базовой информации\nоб источнике"]
+    
+    F --> G["Регистрация нового источника\nв системе"]
+    G --> E
+    
+    E --> J{"План загрузки актуален?"}
+    J -->|Да| I["UC-1.1: Извлечение списка\nкритериев из БД"]
+    J -->|Нет| K["Обновление плана загрузки"]
+    K --> I
+    
+    I --> I1{"БД доступна?"}
+    I1 -->|Да| I2{"Критерии найдены?"}
+    I1 -->|Нет| I3["Уведомление о проблеме\nдоступа к БД"]
+    I3 --> Z["Завершение с ошибкой"]
+    
+    I2 -->|Да| L["Сбор данных для критериев"]
+    I2 -->|Нет| I4["Уведомление об отсутствии\nкритериев оценки"]
+    I4 --> Z
+    
+    L --> M["UC-3: Сбор критериев\nиз внешних систем"]
+    L --> N["UC-5: Сбор данных\nиз опросного листа"]
+    
+    M --> M1{"Соединение с\nисточником данных?"}
+    M1 -->|Да| M2{"Данные найдены?"}
+    M1 -->|Нет| M3["Уведомление о проблеме\nдоступа к источнику"]
+    M3 --> M5["Предложение альтернативных\nисточников данных"]
+    
+    M2 -->|Да| M4["Сохранение данных\nдля расчета"]
+    M2 -->|Нет| M6["Уведомление об\nотсутствии данных"]
+    M6 --> M5
+    M5 --> L
+    M4 --> O
+    
+    N --> N1{"Опросный лист\nна сайте?"}
+    N1 -->|Да| N2{"Опросный лист\nзаполнен?"}
+    N1 -->|Нет| N3{"Ссылка на Confluence\nпредоставлена?"}
+    
+    N2 -->|Да| N4["Извлечение данных\nиз опросного листа"]
+    N2 -->|Нет| N5["Запрос на заполнение\nопросного листа"]
+    N5 --> N1
+    
+    N3 -->|Да| N6{"Ссылка корректна\nи доступна?"}
+    N3 -->|Нет| N7["Запрос корректной\nссылки"]
+    N7 --> N3
+    
+    N6 -->|Да| N8["Извлечение данных\nиз Confluence"]
+    N6 -->|Нет| N9["Уведомление о проблеме\nс доступом к Confluence"]
+    N9 --> N7
+    
+    N4 --> O["Расчет индекса\nготовности"]
+    N8 --> O
+    
+    O --> P{"Пользователь согласен\nс оценкой?"}
+    
+    P -->|Да| Q["Сохранение результатов"]
+    P -->|Нет| R["UC-4: Обоснование\nоценки"]
+    
+    Q --> S{"Пользователь хочет\nполучить рекомендации?"}
+    S -->|Да| U["UC-2: Рекомендации по\nповышению индекса"]
+    S -->|Нет| V["Ожидание дальнейших\nзапросов пользователя"]
+    
+    R --> R1{"Параметр найден\nв базе оценок?"}
+    R1 -->|Да| R2["Формирование объяснения\nс критериями и источниками"]
+    R1 -->|Нет| R3["Уведомление о невозможности\nпредоставить объяснение"]
+    R3 --> R4["Предложение списка\nдоступных параметров"]
+    R4 --> R
+    
+    R2 --> T{"Пользователь предоставил\nдополнительные данные?"}
+    
+    T -->|Да| T1["Анализ новых данных"]
+    T1 --> T2{"Данные подтверждены?"}
+    T2 -->|Да| T3["Пересчет оценки\nпараметра"]
+    T2 -->|Нет| R2
+    
+    T -->|Нет| U
+    
+    U --> U1{"Готовые рекомендации\nдоступны?"}
+    U1 -->|Да| U2["Формирование конкретных\nинструкций по улучшению"]
+    U1 -->|Нет| U3{"Анализ документации\nвозможен?"}
+    
+    U3 -->|Да| U4["Анализ текущих\nпоказателей и документации"]
+    U3 -->|Нет| U5["Предложение консультации\nс экспертом"]
+    
+    U4 --> U2
+    U5 --> Q
+    U2 --> Q
+    
+    T3 --> Q
+-------------------------------------------------------------------------------
+%%{init: { 'logLevel': 'debug', 'theme': 'default' , 'themeVariables': { 'cScale2': '#90EE90' } } }%%
+timeline
+    title План реализации Use cases
+
+    section 1 квартал 2025
+        Проверка баллов : UC-1 Оценка готовности источника к интеграции : Пользователь запрашивает текущий индекс готовности источника, ИИ-агент извлекает и предоставляет эту информацию.
+
+    section 2 квартал 2025
+        Новый источник : UC-1.1 "Извлечение списка критериев из БД" : UC-0 "Расчет индекса готовности" : UC-3 "Сбор критериев из внешних систем" : UC-5 "сбор данных из опросного листа"
+        Рекомендации : UC-2 Повышение индекса : Пользователь запрашивает шаги для улучшения показателей источника.
+        
+
+    section 3-4 квартал 2025
+    Аргументация оценки : UC-4 Аргументация оценки : Предоставления детального объяснения по оценке каждого параметра, включая источники данных и методику расчета.
+        Смена плана : позволяет корректировать цели и планы интеграции
+        Прогресс источника : UC-6 Мониторинг изменений : ИИ-агент периодически проверяет Базу знаний и выполняет пересчет индекса.
+---------------------------------------------------------------------------------
+graph TD;
+    subgraph "Пользовательский слой"
+        UI["Пользовательский интерфейс"] --> Gateway["Модуль API Gateway"]
+    end
+    
+    subgraph "Слой ИИ-агента"
+        Gateway --> Orchestrator["Модуль оркестрации"]
+        Orchestrator --> AnalysisModule["Модуль анализа запросов"]
+        Orchestrator --> PlanningModule["Модуль планирования"]
+        Orchestrator --> IndexModule["Модуль расчета индексов"]
+        Orchestrator --> RecommendModule["Модуль рекомендаций"]
+        
+        subgraph "Модуль планирования"
+            PlanningCore["Ядро планирования"]
+            ConnectorManager["Подмодуль управления коннекторами"]
+            PlanningCore --> ConnectorManager
+        end
+        
+        subgraph "Коннекторы"
+            ConnectorManager --> ConfluenceConnector["Коннектор Confluence"]
+            ConnectorManager --> JiraConnector["Коннектор Jira"]
+            ConnectorManager --> MetaConnector["Коннектор Meta"]
+            ConnectorManager --> SMConnector["Коннектор SM"]
+            ConnectorManager --> BitBucketConnector["Коннектор BitBucket"]
+        end
+    end
+    
+    subgraph "Бэкенд-слой"
+        ConfluenceConnector --> BackendAPI["Модуль API бэкенда"]
+        JiraConnector --> BackendAPI
+        MetaConnector --> BackendAPI
+        SMConnector --> BackendAPI
+        BitBucketConnector --> BackendAPI
+        
+        BackendAPI --> SwaggerSpec["Модуль Swagger-спецификаций"]
+        SwaggerSpec -.-> ConnectorManager
+        
+        BackendAPI --> AuthModule["Модуль аутентификации и авторизации"]
+        BackendAPI --> DataCollectionModule["Модуль сбора данных"]
+        BackendAPI --> TransformationModule["Модуль трансформации данных"]
+        BackendAPI --> StorageModule["Модуль хранения данных"]
+        
+        DataCollectionModule --> ConfluenceAdapter["Адаптер Confluence"]
+        DataCollectionModule --> JiraAdapter["Адаптер Jira"]
+        DataCollectionModule --> MetaAdapter["Адаптер Meta"]
+        DataCollectionModule --> SMAdapter["Адаптер SM"]
+        DataCollectionModule --> BitBucketAdapter["Адаптер BitBucket"]
+        
+        TransformationModule --> StorageModule
+        StorageModule --> RepoDB["Репозиторий БД"]
+        StorageModule --> VectorDB["VectorBD"]
+        
+        IndexModule --> BackendAPI
+        RecommendModule --> BackendAPI
+    end
+    
+    subgraph "Слой внешних систем"
+        ConfluenceAdapter --> Confluence["Confluence API"]
+        JiraAdapter --> Jira["Jira API"]
+        MetaAdapter --> Meta["Meta API"]
+        SMAdapter --> SM["SM API"]
+        BitBucketAdapter --> BitBucket["BitBucket API"]
+    end
+-----------------------------------------------------------------------------------
+graph TB
+    subgraph "MCP Architecture"
+        MCP[Master Control Program] --> AgentManager
+        MCP --> TaskManager
+        MCP --> StateManager
+        MCP --> MonitoringSystem
+        
+        AgentManager --> AgentRegistry
+        AgentManager --> AgentCoordinator
+        
+        TaskManager --> TaskQueue
+        TaskManager --> TaskDistributor
+        
+        StateManager --> StateStore
+        StateManager --> ConfigManager
+        
+        MonitoringSystem --> MetricsCollector
+        MonitoringSystem --> HealthChecker
+    end
+
+    subgraph "Documentation Agent System"
+        API[FastAPI Application] --> DocAgent[Documentation Agent]
+        
+        DocAgent --> Retriever[Text Retriever]
+        DocAgent --> GigaChat[GigaChat API]
+        DocAgent --> Memory[Agent Memory]
+        
+        Retriever --> VectorDB[(Vector Database)]
+        Retriever --> Embeddings[Embeddings Model]
+        
+        subgraph "Features"
+            Retriever --> ContextExpander
+            Retriever --> KnowledgeBase
+            Retriever --> QuestionMatcher
+        end
+        
+        Memory --> ConversationHistory
+        Memory --> CachedResponses
+    end
+
+    subgraph "Data Flow"
+        Client --> API
+        API --> |Request| DocAgent
+        DocAgent --> |Query| Retriever
+        Retriever --> |Context| DocAgent
+        DocAgent --> |Prompt| GigaChat
+        GigaChat --> |Response| DocAgent
+        DocAgent --> |Formatted Answer| API
+    end
+
+    subgraph "Integration Layer"
+        MCP --> |Registers| DocAgent
+        MCP --> |Monitors| DocAgent
+        MCP --> |Manages State| DocAgent
+    end
+
+    classDef mcp fill:#f96,stroke:#333,stroke-width:2px;
+    classDef current fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef data fill:#dfd,stroke:#333,stroke-width:2px;
+    
+    class MCP,AgentManager,TaskManager,StateManager,MonitoringSystem mcp;
+    class API,DocAgent,Retriever,GigaChat,Features current;
+    class VectorDB,ConversationHistory,CachedResponses data;
+----------------------------------------------------------------------------
+sequenceDiagram
+    participant Client
+    participant API
+    participant DocAgent
+    participant Retriever
+    participant GigaChat
+    participant MCP
+
+    Client->>API: Send Query
+    API->>MCP: Register Request
+    MCP->>DocAgent: Assign Task
+    
+    DocAgent->>Retriever: Get Relevant Context
+    Retriever-->>DocAgent: Return Context
+    
+    DocAgent->>GigaChat: Generate Response
+    GigaChat-->>DocAgent: Return Response
+    
+    DocAgent->>DocAgent: Validate & Format
+    DocAgent-->>API: Return Answer
+    API-->>Client: Send Response
+    
+    DocAgent->>MCP: Update State
+    MCP->>MonitoringSystem: Log Metrics
+----------------------------------------------------------------------------
 ### Детальное описание компонентов системы ИИ-агента
 
 ## 1. Пользовательский слой
