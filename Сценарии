@@ -1,3812 +1,739 @@
-Общий жизненный цикл работы системы (Архитектурный взгляд)
+Клиентский путь: Взаимодействие ролей, Frontend и Backend (ФИНАЛЬНАЯ ВЕРСИЯ)
 
-  Весь процесс можно разделить на несколько этапов, где каждый компонент системы (Frontend, Backend, База данных, Файловая система, Nginx) играет
-  свою роль.
+  Этап 1: Создание и Публикация Опросника (Роль: Модератор)
 
-  1. Создание и Публикация Шаблона (Роль: Модератор)
+   1. Действие Модератора (UI): Модератор заходит в систему, переходит в раздел "Шаблоны", нажимает "Создать новый опросник". Заполняет название,
+      описание, добавляет пункты и поля через конструктор формы. Нажимает "Сохранить".
+       * Что делает Frontend: Собирает данные из формы и отправляет их на бэкенд через POST /api/v1/templates.
+       * Что делает Backend: Создает записи в таблицах templates, template_versions, questionnaire_items, fields, связывая их между собой через ID.
+         Возвращает id созданного шаблона.
+       * Что получает Frontend: Подтверждение создания шаблона и его id. Отображает шаблон в списке.
 
-   * Frontend: Модератор через UI создает структуру опросника (название, описание, пункты, поля).
-   * Backend: Получает эту структуру.
-       * База данных: Сохраняет данные в таблицы templates, template_versions, questionnaire_items, fields, выстраивая иерархию.
-   * Frontend: Модератор нажимает "Опубликовать".
-   * Backend: Обновляет статус шаблона.
-       * База данных: Меняет templates.status на PUBLISHED.
-       * Backend: Если выбрано авто-назначение, он получает список всех sources и для каждого создает запись в assignments.
-       * База данных: Записывает новые assignments со статусом LOCKED.
+   2. Действие Модератора (UI): Модератор решает, как назначить опросник.
 
-  2. Активация Заданий (Роль: Модератор)
+       * Вариант А: Автоматическое назначение всем источникам при публикации.
+           * Действие Модератора (UI): Модератор находит созданный шаблон в списке, нажимает "Опубликовать", выбирает опцию "Назначить всем
+             источникам" и подтверждает.
+           * Что делает Frontend: Отправляет POST /api/v1/templates/{templateId}/publish с флагом assignToAllSources: true.
+           * Что делает Backend: Обновляет status шаблона на PUBLISHED. Затем, делает `SELECT id FROM sources` (получает список всех источников в 
+             системе) и для каждого source_id из этого списка создает новую запись в таблице assignments со статусом LOCKED, ссылаясь на template_id
+             и source_id. Возвращает подтверждение.
+           * Что получает Frontend: Подтверждение публикации и создания заданий.
 
-   * Frontend: Модератор выбирает заблокированные задания и нажимает "Активировать".
-   * Backend: Получает список assignment_id.
-       * База данных: Обновляет assignments.status с LOCKED на PENDING для выбранных заданий.
+       * Вариант Б: Ручное назначение конкретным источникам.
+           * Действие Модератора (UI): Модератор находит созданный шаблон в списке, нажимает "Опубликовать" (без опции авто-назначения). Затем
+             переходит в раздел "Задания", нажимает "Создать Задание", выбирает опросник, выбирает конкретные источники, вводит название Задания и
+             подтверждает.
+           * Что делает Frontend (для публикации): Отправляет POST /api/v1/templates/{templateId}/publish (без флага assignToAllSources).
+           * Что делает Backend (для публикации): Обновляет status шаблона на PUBLISHED. Возвращает подтверждение.
+           * Что получает Frontend (для публикации): Подтверждение публикации.
+           * Что делает Frontend (для ручного назначения): Отправляет POST /api/v1/assignments с templateId, массивом sourceIds (выбранные вручную),
+             name Задания.
+           * Что делает Backend (для ручного назначения): Для каждого sourceId из массива создает запись в таблице assignments со статусом LOCKED.
+             Возвращает подтверждение.
+           * Что получает Frontend (для ручного назначения): Подтверждение создания заданий.
 
-  3. Заполнение Опросника (Роль: Пользователь)
+  Этап 2: Активация Заданий (Роль: Модератор)
 
-   * Frontend: Пользователь заходит в систему, видит список заданий.
-   * Backend: Отдает список assignments для source_id пользователя.
-   * Frontend: Пользователь выбирает задание со статусом PENDING и нажимает "Начать работу".
-   * Backend: Обновляет assignments.status на IN_PROGRESS и прописывает assignee_user_id.
-       * База данных: Фиксирует, кто и какое задание взял в работу.
-   * Frontend: Запрашивает структуру опросника.
-   * Backend: Собирает иерархическую структуру из template_versions, questionnaire_items, fields.
-   * Frontend: Динамически отрисовывает форму.
-   * Frontend: Пользователь заполняет поля.
-   * Backend: Получает заполненные данные.
-       * База данных: Создает запись в submissions и множество записей в answers, связывая их с submission_id и field_id.
+   1. Действие Модератора (UI): Модератор переходит в раздел "Задания", видит список всех заданий, в том числе LOCKED. Выбирает несколько заданий
+      (например, для "Тульского филиала") и нажимает "Активировать".
+       * Что делает Frontend: Отправляет POST /api/v1/assignments/unlock с массивом assignmentIds выбранных заданий.
+       * Что делает Backend: Обновляет status выбранных заданий с LOCKED на PENDING в таблице assignments. Возвращает подтверждение.
+       * Что получает Frontend: Подтверждение разблокировки. Обновляет статус заданий в UI.
 
-  4. Проверка и Валидация (Роль: Модератор)
-
-   * Frontend: Модератор открывает сданную работу.
-   * Backend: Собирает полную картину из submissions, answers, fields, questionnaire_items, users.
-   * Frontend: Отображает заполненную форму. Модератор видит ответы и приложенные файлы.
-   * Frontend: Модератор отклоняет конкретный ответ, пишет комментарий.
-   * Backend: Обновляет answers.validation_status и answers.moderator_comment.
-       * База данных: Фиксирует вердикт по ответу.
-   * Frontend: Модератор отправляет работу на доработку.
-   * Backend: Обновляет submissions.status на REJECTED.
-       * База данных: Фиксирует статус работы.
-
-  5. Исправление и Повторная Отправка (Роль: Пользователь)
-
-   * Frontend: Пользователь видит работу со статусом REJECTED, открывает ее.
-   * Backend: Отдает ту же полную картину, но теперь с комментариями модератора.
-   * Frontend: Подсвечивает отклоненные поля. Пользователь вносит исправления.
-   * Backend: Получает исправленные данные.
-       * База данных: Обновляет answers (сбрасывает validation_status на PENDING, очищает moderator_comment). Обновляет submissions.status на
-         SUBMITTED.
-
-  6. Финальное Утверждение (Роль: Модератор)
-
-   * Frontend: Модератор повторно проверяет работу.
-   * Backend: Отдает актуальное состояние.
-   * Frontend: Модератор утверждает все пункты.
-   * Backend: Обновляет answers.validation_status на APPROVED.
-   * Frontend: Модератор нажимает "Утвердить и закрыть".
-   * Backend: Обновляет submissions.status на APPROVED.
-       * База данных: Обновляет assignments.status на COMPLETED, закрывая цикл по заданию.
-
-Логика загрузки файлов (Upload Logic)
-
-   1. Пользователь (Frontend):
-       * Через интерфейс выбирает файл на своем компьютере.
-       * Frontend немедленно отправляет этот файл на бэкенд, используя отдельный API-эндпоинт (POST /api/v1/files/upload). Это происходит до
-         отправки всей формы.
-
-   2. Бэкенд-приложение:
-       * Получает файл в виде multipart/form-data потока.
-       * Генерирует уникальное имя для этого файла (например, a1b2c3d4-e5f6.pdf), чтобы избежать конфликтов имен и обеспечить безопасность.
-       * Записывает файл на локальный диск сервера в специально выделенную папку (например, /var/data/questionnaire_uploads).
-       * Не взаимодействует с основной базой данных на этом этапе.
-       * Возвращает фронтенду это уникальное имя файла (filePath) и исходное имя (originalFilename).
-
-   3. Пользователь (Frontend):
-       * Получает уникальное имя файла от бэкенда.
-       * Сохраняет это имя в своем внутреннем состоянии (например, в React State) для соответствующего поля формы.
-       * Отображает пользователю, что файл успешно загружен (например, "Файл acts.pdf прикреплен").
-
-   4. Бэкенд-приложение (при отправке формы):
-       * Когда пользователь отправляет всю форму (POST /api/v1/submissions), бэкенд получает уникальное имя файла (filePath) как часть данных
-         ответа.
-       * База данных: Записывает это уникальное имя файла (filePath) и исходное имя (originalFilename) в колонки answers.file_path и
-         answers.original_filename в таблице answers.
-
-Обновленная логика выгрузки/просмотра файлов (Secure Download Logic)
-
-   1. Бэкенд-приложение (при формировании `downloadUrl`):
-       * Когда фронтенд запрашивает данные заполнения (GET /api/v1/submissions/{submissionId}), бэкенд, вместо того чтобы формировать прямой путь
-         /uploads/..., теперь формирует downloadUrl, указывающий на свой собственный API-эндпоинт.
-       * Пример `downloadUrl`: /api/v1/submissions/{submissionId}/answers/{answerId}/file (этот путь позволяет бэкенду точно знать, какой файл и в
-         каком контексте запрашивается).
-
-   2. Пользователь/Модератор (Frontend):
-       * Получает JSON-ответ с новым downloadUrl.
-       * Рендерит ссылку (<a href="...">) или тег изображения (<img src="...">), используя этот downloadUrl.
-
-   3. Браузер пользователя:
-       * Когда пользователь кликает по ссылке, браузер отправляет HTTP-запрос на GET /api/v1/submissions/{submissionId}/answers/{answerId}/file.
-
-   4. Nginx (Веб-сервер):
-       * Перехватывает этот запрос.
-       * Ключевой момент: Nginx теперь настроен так, чтобы все запросы, начинающиеся с /api/v1/, перенаправлять на бэкенд-приложение. Он больше не
-         раздает файлы напрямую из папки /uploads/.
-
-   5. Бэкенд-приложение (при получении запроса на скачивание):
-       * Шаг 1: Аутентификация. Проверяет JWT токен пользователя в заголовках запроса. Если токена нет или он невалиден, возвращает 401 
-         Unauthorized.
-       * Шаг 2: Авторизация. Извлекает userId из токена, submissionId и answerId из URL запроса.
-           * Проверяет в базе данных:
-               * Является ли userId владельцем submissionId?
-               * Или userId имеет роль MODERATOR?
-               * И относится ли answerId к этому submissionId?
-           * Если пользователь не имеет прав на просмотр этого файла, возвращает 403 Forbidden.
-       * Шаг 3: Раздача файла. Если пользователь авторизован:
-           * Бэкенд извлекает file_path из таблицы answers по answerId.
-           * Читает файл с локального диска (из папки /var/data/questionnaire_uploads) по этому file_path.
-           * Устанавливает правильные HTTP-заголовки (Content-Type, Content-Disposition).
-           * Стримит (потоково передает) содержимое файла обратно в браузер пользователя.
+  Этап 3: Пользователь видит Задания и берет одно в работу (Роль: Пользователь)
 
 
+   1. Действие Пользователя (UI): Пользователь (Иванов) заходит в систему, открывает страницу "Мои задания".
+       * Что делает Frontend: Отправляет GET /api/v1/assignments/my.
+       * Что делает Backend: Находит source_id пользователя, выбирает все assignments для этого источника, JOIN с templates для названия. Возвращает
+         список заданий.
+       * Что получает Frontend: Список заданий. Отображает их, помечая LOCKED как неактивные, PENDING как активные.
+   2. Действие Пользователя (UI): Иванов видит Задание "Квартальный отчет" со статусом PENDING. Нажимает "Начать работу".
+       * Что делает Frontend: Отправляет POST /api/v1/assignments/{assignmentId}/claim.
+       * Что делает Backend: Обновляет assignments.status на IN_PROGRESS и прописывает assignee_user_id (ID Иванова). Возвращает обновленное
+         задание.
+       * Что получает Frontend: Обновленный статус задания в UI.
+
+  Этап 4: Заполнение Опросника (Роль: Пользователь)
+
+   1. Действие Пользователя (UI): Иванов открывает форму опросника.
+       * Что делает Frontend: Отправляет GET /api/v1/templates/{templateId}/versions/{versionNumber}.
+       * Что делает Backend: Собирает полную иерархическую структуру формы из template_versions, questionnaire_items, fields. Возвращает эту
+         структуру.
+       * Что получает Frontend: Полную структуру формы. Динамически отрисовывает форму на основе полученного JSON.
+   2. Действие Пользователя (UI): Иванов заполняет текстовые поля. Доходит до поля "Файл отчета" и загружает отчет.pdf.
+       * Что делает Frontend: Отправляет POST /api/v1/files/upload.
+       * Что делает Backend: Сохраняет файл на диск, возвращает filePath и originalFilename.
+       * Что получает Frontend: filePath и originalFilename. Отображает имя файла, сохраняет filePath в состоянии формы.
+   3. Действие Пользователя (UI): Иванов нажимает "Отправить".
+       * Что делает Frontend: Собирает все данные из формы (включая filePath для файлов) и отправляет POST /api/v1/submissions.
+       * Что делает Backend: Создает записи в submissions (ссылаясь на assignment_id, version_id, user_id) и множество записей в answers (ссылаясь
+         на submissions.id и fields.id). Возвращает submission_id и статус.
+       * Что получает Frontend: Подтверждение. Отображает сообщение об успешной отправке, перенаправляет пользователя.
+
+  Этап 5: Проверка и Отклонение (Роль: Модератор)
+
+   1. Действие Модератора (UI): Модератор видит, что появилась новая работа на проверку. Открывает ее.
+       * Что делает Frontend: Отправляет GET /api/v1/submissions/{submissionId}.
+       * Что делает Backend: Собирает полную картину заполненной формы из submissions, answers, fields, questionnaire_items, users. Для файловых
+         ответов конструирует downloadUrl (ссылку на безопасный эндпоинт скачивания). Возвращает этот JSON.
+       * Что получает Frontend: Полную картину заполненной формы. Отображает ее.
+   2. Действие Модератора (UI): Модератор отклоняет ответ на "Файл отчета", пишет комментарий.
+       * Что делает Frontend: Отправляет POST /api/v1/answers/{answerId}/validate.
+       * Что делает Backend: Обновляет answers.validation_status на REJECTED и moderator_comment. Возвращает обновленный ответ.
+       * Что получает Frontend: Обновляет UI для этого ответа.
+   3. Действие Модератора (UI): Модератор нажимает "Отправить на доработку" для всей работы.
+       * Что делает Frontend: Отправляет PUT /api/v1/submissions/{submissionId}.
+       * Что делает Backend: Обновляет submissions.status на REJECTED. Возвращает подтверждение.
+       * Что получает Frontend: Обновляет UI.
+
+  Этап 6: Исправление и Повторная Отправка (Роль: Пользователь)
 
 
+   1. Действие Пользователя (UI): Пользователь открывает работу, видит комментарии.
+       * Что делает Frontend: Отправляет GET /api/v1/submissions/{submissionId}.
+       * Что делает Backend: Возвращает форму с REJECTED статусами и комментариями.
+       * Что получает Frontend: Отображает форму, подсвечивает ошибки.
+   2. Действие Пользователя (UI): Загружает новый, исправленный файл.
+       * Что делает Frontend: Отправляет POST /api/v1/files/upload.
+       * Что делает Backend: Сохраняет файл на диск, возвращает filePath.
+       * Что получает Frontend: filePath нового файла. Обновляет состояние формы.
+   3. Действие Пользователя (UI): Нажимает "Отправить".
+       * Что делает Frontend: Отправляет PUT /api/v1/submissions/{submissionId} (с обновленными answers).
+       * Что делает Backend: Обновляет answers (меняет file_path, сбрасывает validation_status на PENDING, очищает moderator_comment). Обновляет
+         submissions.status на SUBMITTED. Возвращает подтверждение.
+       * Что получает Frontend: Подтверждение.
 
+  Этап 7: Финальное Утверждение (Роль: Модератор)
 
+   1. Действие Модератора (UI): Модератор повторно проверяет работу.
+       * Что делает Frontend: Отправляет GET /api/v1/submissions/{submissionId}.
+       * Что делает Backend: Возвращает форму с PENDING статусами.
+       * Что получает Frontend: Отображает форму.
+   2. Действие Модератора (UI): Модератор утверждает исправленный ответ.
+       * Что делает Frontend: Отправляет POST /api/v1/answers/{answerId}/validate.
+       * Что делает Backend: Обновляет answers.validation_status на APPROVED. Возвращает обновленный ответ.
+       * Что получает Frontend: Обновляет UI.
+   3. Действие Модератора (UI): Модератор утверждает всю работу.
+       * Что делает Frontend: Отправляет PUT /api/v1/submissions/{submissionId}.
+       * Что делает Backend: Обновляет submissions.status на APPROVED. Обновляет assignments.status на COMPLETED. Возвращает подтверждение.
+       * Что получает Frontend: Подтверждение.
+================================================================================================
+ТЗ
 
+ Epic 2: `[MODERATOR]` - Управление жизненным циклом опросников
 
-
-
-
-Пересмотренная декомпозиция задач для разработчиков
-
-  Epic 1: `[CORE]` - Ядро системы и Аутентификация (Backend)
-
-   * Задача 1.1: Настройка проекта и создание схемы БД.
-       * Что внутри: Инициализировать Backend-проект, настроить подключение к PostgreSQL. Написать и применить миграции для создания всех таблиц.
-       * Почему: Фундамент.
-   * Задача 1.2: Реализация API аутентификации.
-       * Что внутри: Реализовать эндпоинты /auth/login, /auth/register, /auth/me. Настроить JWT.
-       * Почему: Сквозная функциональность.
-
-  Epic 2: `[MODERATOR]` - Управление жизненным циклом опросников (Backend)
-
-   * Задача 2.1: API для управления шаблонами (CRUD).
-       * Что внутри: Реализовать POST /templates, GET /templates, GET /templates/.../versions/....
-       * Почему: Ключевой функционал модератора.
-   * Задача 2.2: API для управления назначениями (Assignments).
-       * Что внутри: Реализовать POST /templates/.../publish, POST /assignments/unlock, POST /assignments/.../claim.
-       * Почему: Логика "дистрибуции" контента.
-
-  Epic 3: `[USER]` - Функционал заполнения и проверки (Backend)
-
-   * Задача 3.1: Реализация загрузки файлов (Upload).
-       * Что внутри: Создать эндпоинт POST /api/v1/files/upload. Реализовать сохранение файла на диск с уникальным именем.
-       * Почему: Это отдельная, самодостаточная функция, которая не требует доступа к основной БД.
-   * Задача 3.2: Реализация отправки `submissions` и безопасной выгрузки файлов (Download).
+   * Задача 2.1 (Backend): API для управления шаблонами (CRUD).
        * Что внутри:
-           * Реализовать POST /api/v1/submissions (сохранение ответов).
-           * Реализовать новый эндпоинт `GET /api/v1/submissions/{submissionId}/answers/{answerId}/file` для безопасной выгрузки файлов.
-           * Внутри этого эндпоинта: реализовать логику аутентификации, авторизации (проверка прав пользователя на доступ к файлу), чтение файла с
-             диска и потоковую передачу его клиенту.
-       * Почему: POST /submissions и GET /submissions/{id} тесно связаны. Логика безопасной выгрузки файлов теперь является частью бэкенда и должна
-         быть реализована вместе с основным функционалом submissions, так как она требует доступа к данным submissions и answers для проверки прав.
-   * Задача 3.3: Реализация валидации.
-       * Что внутри: Реализовать POST /api/v1/answers/{id}/validate и логику PUT /api/v1/submissions/{id} для модератора (утверждение/отклонение
-         всей работы и закрытие assignment).
-       * Почему: Завершающий шаг цикла проверки.
+           * Создать/обновить модели данных (ORM) для таблиц templates, template_versions, questionnaire_items, fields.
+           * Реализовать контроллеры/обработчики для эндпоинтов:
+               * POST /api/v1/templates (создание шаблона с иерархией пунктов/полей)
+               * GET /api/v1/templates (список шаблонов)
+               * GET /api/v1/templates/{templateId} (детали шаблона)
+               * PUT /api/v1/templates/{templateId} (обновление шаблона)
+               * DELETE /api/v1/templates/{templateId} (архивирование шаблона)
+               * POST /api/v1/templates/{templateId}/versions (создание новой версии)
+               * GET /api/v1/templates/{templateId}/versions/{versionNumber} (получение структуры версии)
+           * Написать логику для сохранения и извлечения данных, используя ORM, точно зная, какие поля из запроса куда мапятся в БД.
+           * Обеспечить правильную обработку ошибок и валидацию данных.
+           * Написать юнит-тесты для реализованного функционала.
+       * Зависимости: Задача 1.1, Задача 1.2.
 
-  Epic 4: `[FRONTEND]` - Настройка и UI-Kit
-
-   * Задача 4.1: Инициализация проекта и настройка UI.
-       * Что внутри: Настроить Frontend-проект, роутинг, state manager, базовые компоненты.
-       * Почему: Фундамент для фронтенда.
-   * Задача 4.2: UI для аутентификации.
-       * Что внутри: Создать страницы логина/регистрации, логику работы с JWT.
-       * Почему: Открывает доступ к приложению.
-
-  Epic 5: `[FRONTEND]` - Реализация основного функционала
-
-   * Задача 5.1: UI для управления шаблонами.
-       * Что внутри: Разработать интерфейс для модератора по созданию/редактированию шаблонов.
-       * Почему: Модераторский функционал.
-   * Задача 5.2: UI для управления заданиями.
-       * Что внутри: Разработать UI для модератора по просмотру и активации заданий.
-       * Почему: Ключевой модераторский функционал.
-   * Задача 5.3: UI для заполнения опросника (с учетом безопасной работы с файлами).
+   * Задача 2.2 (Backend): API для управления назначениями (Assignments).
        * Что внутри:
-           * Разработать UI для пользователя: список заданий, рендеринг формы из JSON.
-           * Реализовать логику загрузки файлов через `POST /api/v1/files/upload`.
-           * Реализовать логику скачивания файлов, используя новый безопасный эндпоинт `GET 
-             /api/v1/submissions/{submissionId}/answers/{answerId}/file`.
-           * Реализовать логику отправки формы.
-       * Почему: Это самая большая и критичная задача для роли "Пользователь".
-   * Задача 5.4: UI для проверки опросника (с учетом безопасного скачивания файлов).
-       * Что внутри: Разработать UI для модератора: экран проверки, отображение ответов, комментариев.
-       * Модераторский UI должен использовать новый безопасный эндпоинт `GET /api/v1/submissions/{submissionId}/answers/{answerId}/file` для 
-         скачивания файлов.
-       * Почему: Завершает цикл со стороны модератора.
-
-  Epic 6: `[DEVOPS]` - Настройка Nginx и развертывание
-
-   * Задача 6.1: Настройка Nginx и окружений.
-       * Что внутри: Настроить Nginx для проксирования всех запросов /api/v1/ на бэкенд. Удалить любые настройки Nginx для прямой раздачи файлов из 
-         `/uploads/`. Настроить CI/CD.
-       * Почему: Nginx теперь играет другую роль в раздаче файлов, и это критично для безопасности.
-
-Итог:
-  Теперь задачи по работе с файлами четко разделены:
-   * Загрузка (Upload): Отдельный эндпоинт POST /api/v1/files/upload (Задача 3.1).
-   * Выгрузка (Download): Интегрирована в submissions API (GET /api/v1/submissions/{submissionId}/answers/{answerId}/file) и является частью Задачи
-     3.2.
-
-========
-Список API эндпоинтов по задачам разработки
-
-  Epic 1: `[CORE]` - Ядро системы и Аутентификация (Backend)
-
-   * Задача 1.2: Реализация API аутентификации.
-       * POST /api/v1/auth/login
-       * POST /api/v1/auth/register
-       * GET /api/v1/auth/me
-
-  Epic 2: `[MODERATOR]` - Управление жизненным циклом опросников (Backend)
-
-   * Задача 2.1: API для управления шаблонами (CRUD).
-       * POST /api/v1/templates
-       * GET /api/v1/templates
-       * GET /api/v1/templates/{templateId}
-       * PUT /api/v1/templates/{templateId}
-       * DELETE /api/v1/templates/{templateId} (для архивирования/мягкого удаления)
-       * POST /api/v1/templates/{templateId}/versions (для создания новой версии)
-       * GET /api/v1/templates/{templateId}/versions/{versionNumber}
-
-   * Задача 2.2: API для управления назначениями (Assignments).
-       * POST /api/v1/templates/{templateId}/publish
-       * POST /api/v1/assignments
-       * POST /api/v1/assignments/unlock
-       * POST /api/v1/assignments/{assignmentId}/claim
-       * GET /api/v1/assignments/my
-       * GET /api/v1/assignments (для модератора, чтобы видеть все назначения)
-       * DELETE /api/v1/assignments/{assignmentId}
-
-  Epic 3: `[USER]` - Функционал заполнения и проверки (Backend)
-
-   * Задача 3.1: Реализация загрузки файлов (Upload).
-       * POST /api/v1/files/upload
-
-   * Задача 3.2: Реализация отправки `submissions` и безопасной выгрузки файлов (Download).
-       * POST /api/v1/submissions
-       * GET /api/v1/submissions/{submissionId}
-       * PUT /api/v1/submissions/{submissionId} (для повторной отправки пользователем или финального статуса модератором)
-       * GET /api/v1/submissions/{submissionId}/answers/{answerId}/file (для безопасного скачивания файла)
-       * POST /api/v1/answers/{answerId}/validate
-
-   * Задача 3.3: Реализация валидации.
-       * Примечание: Эта задача фокусируется на бизнес-логике валидации внутри уже существующих эндпоинтов. Сами эндпоинты (POST 
-         /api/v1/answers/{answerId}/validate и PUT /api/v1/submissions/{submissionId}) уже перечислены в Задаче 3.2. Здесь нужно будет доработать
-         логику проверки прав и статусов.
-
-  Дополнительные эндпоинты (если включены в задачи)
-
-   * Задача X: API для аудита.
-       * GET /api/v1/audit-logs
-
-
-
-
-
-
-
-
-graph TD
-    Start[Входящий запрос] --> ParseIntent{Определить намерение}
-    
-    ParseIntent -->|Узнать баллы| ScoreFlow[Сценарий 1: Проверка баллов]
-    ParseIntent -->|Новый источник| NewFlow[Сценарий 2: Новый источник]
-    ParseIntent -->|Улучшить баллы| ImproveFlow[Сценарий 3: Рекомендации]
-    ParseIntent -->|Сменить план| PlanFlow[Сценарий 4: Смена плана]
-    ParseIntent -->|Прогресс| HistoryFlow[Сценарий 5: Прогресс источника]
-    ParseIntent -->|Анализ разрыва| GapFlow[Сценарий 6: Gap-анализ]
-    ParseIntent -->|Проверка параметра| ParamFlow[Сценарий 7: Параметр]
-    ParseIntent -->|Документация| DocFlow[Сценарий 8: Документация]
-
-    ScoreFlow --> Response[Формирование ответа]
-    NewFlow --> Response
-    ImproveFlow --> Response
-    PlanFlow --> Response
-    HistoryFlow --> Response
-    GapFlow --> Response
-    ParamFlow --> Response
-    DocFlow --> Response
-
-    Response --> NextAction{Нужны доп. действия?}
-    NextAction -->|Да| ParseIntent
-    NextAction -->|Нет| End[Завершение диалога]
-
---------------------------------------------------------------------------------------
-graph TD
-    %% Сценарий 1 - Запрос индекса зрелости
-    Start[Получен запрос индекса зрелости] --> ValidateSource{Валидация ID источника}
-    
-    ValidateSource -->|ID некорректный| ErrorResponse[Сообщить об ошибке формата]
-    ErrorResponse --> End1[Предложить начать оценку]
-    
-    ValidateSource -->|ID корректный| CheckSource{Проверка в SOURCES}
-    CheckSource -->|Не найден| NewSource[Предложить начать оценку]
-    
-    CheckSource -->|Найден| CheckScoreDate{Проверка даты расчета в SOURCE_SCORES_TOTAL}
-    
-    CheckScoreDate -->|Старее 24ч| SuggestRecalc[Предложить пересчет]
-    SuggestRecalc -->|Согласен| StartRecalc[Запустить пересчет]
-    SuggestRecalc -->|Отказ| ShowOldScore[Показать текущий балл с пометкой]
-    
-    CheckScoreDate -->|Актуален| ShowCurrentScore[Показать текущий балл]
-    
-    ShowCurrentScore --> WaitForDetails{Ожидание запроса деталей}
-    ShowOldScore --> WaitForDetails
-    
-    WaitForDetails -->|Запрошены детали| GetDetails[Получить SOURCE_SCORES_DETAILS]
-    GetDetails --> AnalyzeParams[Анализ параметров]
-    
-    AnalyzeParams --> ShowDetailedScore[Показать детальный расчет]
-    ShowDetailedScore --> CheckChanges{Проверка изменений в системах}
-    
-    CheckChanges -->|Есть изменения| OfferUpdate[Предложить обновление]
-    CheckChanges -->|Нет изменений| EndDetails[Завершить детализацию]
-    
-    OfferUpdate -->|Согласен| StartUpdate[Запустить пересчет]
-    OfferUpdate -->|Отказ| EndDetails
----------------------------------------------------------------------------------------------------
-graph TD
-    %% Сценарий 2 - Новый источник
-    Start[Начало оценки нового источника] --> ValidateInput{Проверка входных данных}
-    
-    ValidateInput -->|Некорректные| RequestCorrect[Запросить корректные данные]
-    RequestCorrect --> ValidateInput
-    
-    ValidateInput -->|Корректные| CheckExisting{Проверка в SOURCES}
-    CheckExisting -->|Найден| SuggestUpdate[Предложить обновление существующего]
-    
-    CheckExisting -->|Не найден| PlanSelection[Показать описание планов A/B/C]
-    PlanSelection --> WaitPlan{Ожидание выбора плана}
-    
-    WaitPlan -->|План выбран| ValidatePlan{Проверка плана}
-    WaitPlan -->|Нужна помощь| ShowPlanDetails[Показать детали планов]
-    ShowPlanDetails --> WaitPlan
-    
-    ValidatePlan -->|Некорректный| PlanSelection
-    
-    ValidatePlan -->|Корректный| CreateSource[Создать запись в SOURCES]
-    CreateSource --> GetPlanParams[Получить параметры из PLAN_PARAMETERS]
-    
-    GetPlanParams --> InitParams[Инициализация параметров]
-    InitParams --> StartDialog[Начать диалог сбора данных]
-    
-    StartDialog --> CollectMeta[Сбор данных из META]
-    CollectMeta --> CollectDialog[Сбор данных через диалог]
-    
-    CollectDialog --> ValidateCollected{Проверка собранных данных}
-    ValidateCollected -->|Неполные| IdentifyMissing[Определить недостающие]
-    IdentifyMissing --> CollectDialog
-    
-    ValidateCollected -->|Полные| CalculateInitial[Расчет начальных баллов]
-    CalculateInitial --> SaveScores[Сохранение в SOURCE_SCORES]
-    
-    SaveScores --> ShowResults[Показать результаты]
-    ShowResults --> OfferNext{Предложить следующие шаги}
-    
-    OfferNext -->|Улучшение| StartImprovement[Начать сценарий улучшения]
-    OfferNext -->|Документация| ShowDocs[Показать документацию]
-    OfferNext -->|Завершить| End[Завершение оценки]
-------------------------------------------------------------------------------------------
-graph TD
-    %% Сценарий 3 - Запрос улучшений
-    Start[Запрос улучшений] --> ValidateSource{Проверка источника}
-    
-    ValidateSource -->|Не найден| ErrorSource[Сообщить об отсутствии источника]
-    ErrorSource --> OfferStart[Предложить начать оценку]
-    
-    ValidateSource -->|Найден| GetCurrentPlan[Получить текущий план из SOURCES]
-    GetCurrentPlan --> LoadScores[Загрузка SOURCE_SCORES_DETAILS]
-    
-    LoadScores --> AnalyzeScores[Анализ текущих баллов]
-    AnalyzeScores --> GetWeights[Получение весов из EVALUATION_PARAMETERS]
-    
-    GetWeights --> PrioritizeImprovements[Приоритизация улучшений]
-    PrioritizeImprovements --> SortByWeight[Сортировка по весу параметров]
-    
-    SortByWeight --> FilterByPlan{Фильтрация по плану}
-    FilterByPlan --> IdentifyQuickWins[Определение быстрых улучшений]
-    
-    IdentifyQuickWins --> CreateRoadmap[Создание дорожной карты]
-    CreateRoadmap --> GenerateRecommendations[Генерация рекомендаций]
-    
-    GenerateRecommendations --> ShowPrioritized[Показ приоритетных действий]
-    ShowPrioritized --> OfferDetails{Предложить детали}
-    
-    OfferDetails -->|Документация| ShowDocs[Показать документацию]
-    OfferDetails -->|Консультация| OfferHelp[Предложить помощь]
-    OfferDetails -->|План действий| ShowActionPlan[Показать пошаговый план]
-    
-    ShowDocs --> WaitForAction{Ожидание выбора действия}
-    OfferHelp --> WaitForAction
-    ShowActionPlan --> WaitForAction
-    
-    WaitForAction -->|Выбрано действие| StartImplementation[Начать реализацию]
-    WaitForAction -->|Отложить| ScheduleReminder[Запланировать напоминание]
-    
-    StartImplementation --> TrackProgress[Отслеживание прогресса]
-    ScheduleReminder --> End[Завершение сценария]
-    TrackProgress --> End
------------------------------------------------------------------------------------
-graph TD
-    %% Сценарий 4 - Смена плана интеграции
-    Start[Запрос смены плана] --> ValidateSource{Проверка источника}
-    
-    ValidateSource -->|Не найден| ErrorSource[Сообщить об ошибке]
-    ValidateSource -->|Найден| GetCurrentPlan[Получить текущий план]
-    
-    GetCurrentPlan --> ValidateNewPlan{Проверка нового плана}
-    ValidateNewPlan -->|Некорректный| RequestValidPlan[Запросить корректный план]
-    
-    ValidateNewPlan -->|Корректный| ComparePlans[Сравнение планов]
-    ComparePlans --> LoadCurrentParams[Загрузка текущих параметров]
-    
-    LoadCurrentParams --> LoadNewParams[Загрузка параметров нового плана]
-    LoadNewParams --> AnalyzeDifference[Анализ различий]
-    
-    AnalyzeDifference --> CalculateGap[Расчёт разрыва]
-    CalculateGap --> PrepareReport[Подготовка отчёта изменений]
-    
-    PrepareReport --> ShowChanges[Показать изменения]
-    ShowChanges --> ConfirmChange{Подтверждение смены}
-    
-    ConfirmChange -->|Отмена| End[Завершение без изменений]
-    ConfirmChange -->|Подтверждено| UpdatePlan[Обновление плана в SOURCES]
-    
-    UpdatePlan --> RecalculateScores[Пересчёт баллов]
-    RecalculateScores --> UpdateScores[Обновление SOURCE_SCORES]
-    
-    UpdateScores --> GenerateTaskList[Генерация списка задач]
-    GenerateTaskList --> ShowNewRequirements[Показ новых требований]
-    
-    ShowNewRequirements --> OfferAssistance{Предложить помощь}
-    OfferAssistance -->|Документация| ProvideDocs[Предоставить документацию]
-    OfferAssistance -->|Консультация| ScheduleCall[Запланировать созвон]
-    OfferAssistance -->|Самостоятельно| EndChange[Завершение смены плана]
-    
-    ProvideDocs --> TrackProgress[Отслеживание прогресса]
-    ScheduleCall --> TrackProgress
-    TrackProgress --> EndChange
------------------------------------------------------------------------------------
-graph TD
-    %% Сценарий 5 - История изменений
-    Start[Запрос истории] --> ValidateSource{Проверка источника}
-    
-    ValidateSource -->|Не найден| ErrorSource[Сообщить об ошибке]
-    ValidateSource -->|Найден| GetDateRange[Получить период анализа]
-    
-    GetDateRange --> ValidateRange{Проверка периода}
-    ValidateRange -->|Некорректный| RequestValidRange[Запросить корректный период]
-    ValidateRange -->|Корректный| LoadHistory[Загрузка SOURCE_SCORES_TOTAL]
-    
-    LoadHistory --> AnalyzeChanges[Анализ изменений]
-    AnalyzeChanges --> DetectTrends[Определение трендов]
-    
-    DetectTrends --> LoadDetails[Загрузка SOURCE_SCORES_DETAILS]
-    LoadDetails --> AnalyzeParameters[Анализ изменений параметров]
-    
-    AnalyzeParameters --> GenerateReport[Генерация отчёта]
-    GenerateReport --> ShowSummary[Показать сводку]
-    
-    ShowSummary --> OfferDetails{Предложить детализацию}
-    OfferDetails -->|По параметрам| ShowParamHistory[История по параметрам]
-    OfferDetails -->|По периодам| ShowPeriodHistory[История по периодам]
-    OfferDetails -->|По событиям| ShowEventHistory[История по событиям]
-    
-    ShowParamHistory --> AnalyzeSpecific[Анализ конкретных изменений]
-    ShowPeriodHistory --> AnalyzeSpecific
-    ShowEventHistory --> AnalyzeSpecific
-    
-    AnalyzeSpecific --> OfferInsights{Предложить инсайты}
-    OfferInsights -->|Рекомендации| ShowRecommendations[Показать рекомендации]
-    OfferInsights -->|Прогноз| ShowForecast[Показать прогноз]
-    OfferInsights -->|Сравнение| ShowComparison[Сравнить с другими]
-    
-    ShowRecommendations --> EndReport[Завершение отчёта]
-    ShowForecast --> EndReport
-    ShowComparison --> EndReport
---------------------------------------------------------------------------
-graph TD
-    %% Сценарий 6 - Анализ разрыва
-    Start[Запрос анализа разрыва] --> ValidateSource{Проверка источника}
-    
-    ValidateSource -->|Найден| GetCurrentPlan[Получить текущий план]
-    ValidateSource -->|Не найден| ErrorSource[Сообщить об ошибке]
-    
-    GetCurrentPlan --> LoadThresholds[Загрузка пороговых значений]
-    LoadThresholds --> LoadCurrentScores[Загрузка текущих баллов]
-    
-    LoadCurrentScores --> CalculateGaps[Расчёт разрывов]
-    CalculateGaps --> PrioritizeGaps[Приоритизация разрывов]
-    
-    PrioritizeGaps --> AnalyzeEffort[Анализ трудозатрат]
-    AnalyzeEffort --> CalculateROI[Расчёт эффективности]
-    
-    CalculateROI --> GenerateRoadmap[Создание дорожной карты]
-    GenerateRoadmap --> ShowGapAnalysis[Показать анализ разрывов]
-    
-    ShowGapAnalysis --> OfferDetails{Предложить детализацию}
-    OfferDetails -->|По параметрам| ShowParamGaps[Разрывы по параметрам]
-    OfferDetails -->|По приоритетам| ShowPriorityGaps[Разрывы по приоритетам]
-    OfferDetails -->|По сложности| ShowComplexityGaps[Разрывы по сложности]
-    
-    ShowParamGaps --> GenerateActionPlan[Генерация плана действий]
-    ShowPriorityGaps --> GenerateActionPlan
-    ShowComplexityGaps --> GenerateActionPlan
-    
-    GenerateActionPlan --> OfferSupport{Предложить поддержку}
-    OfferSupport -->|Документация| ProvideDocs[Предоставить документацию]
-    OfferSupport -->|Консультация| ScheduleConsult[Запланировать консультацию]
-    OfferSupport -->|План работ| CreateWorkPlan[Создать план работ]
-    
-    ProvideDocs --> TrackProgress[Отслеживание прогресса]
-    ScheduleConsult --> TrackProgress
-    CreateWorkPlan --> TrackProgress
-    
-    TrackProgress --> EndAnalysis[Завершение анализа]
---------------------------------------------------------------------------------
-graph TD
-    %% Сценарий 7 - Проверка параметра
-    Start[Запрос проверки параметра] --> ValidateParam{Проверка параметра}
-    
-    ValidateParam -->|Некорректный| ShowValidParams[Показать список параметров]
-    ValidateParam -->|Корректный| CheckSource{Проверка источника}
-    
-    CheckSource -->|Не найден| ErrorSource[Сообщить об ошибке]
-    CheckSource -->|Найден| GetParamDetails[Получить детали параметра]
-    
-    GetParamDetails --> CheckParamSource{Проверка источника данных}
-    CheckParamSource -->|META| LoadMetaParam[Загрузка из META_PARAMS]
-    CheckParamSource -->|DIALOG| LoadDialogParam[Загрузка из DIALOG_PARAMS]
-    
-    LoadMetaParam --> ValidateValue{Проверка значения}
-    LoadDialogParam --> ValidateValue
-    
-    ValidateValue -->|Отсутствует| CheckRequired{Проверка обязательности}
-    ValidateValue -->|Присутствует| AnalyzeValue[Анализ значения]
-    
-    CheckRequired -->|Обязательный| SuggestCollection[Предложить сбор данных]
-    CheckRequired -->|Опциональный| ShowStatus[Показать текущий статус]
-    
-    AnalyzeValue --> CompareThreshold[Сравнение с порогом]
-    CompareThreshold --> GenerateInsights[Генерация инсайтов]
-    
-    GenerateInsights --> ShowAnalysis[Показать анализ]
-    ShowAnalysis --> OfferActions{Предложить действия}
-    
-    OfferActions -->|Улучшение| SuggestImprovement[Предложить улучшения]
-    OfferActions -->|Документация| ShowDocs[Показать документацию]
-    OfferActions -->|Консультация| OfferHelp[Предложить помощь]
-    
-    SuggestImprovement --> TrackParameter[Отслеживание параметра]
-    ShowDocs --> TrackParameter
-    OfferHelp --> TrackParameter
-    
-    TrackParameter --> EndCheck[Завершение проверки]
------------------------------------------------------------------------------
-graph TD
-    %% Сценарий 8 - Запрос документации
-    Start[Запрос документации] --> ParseRequest[Анализ запроса]
-    
-    ParseRequest --> IdentifyTopic{Определение темы}
-    IdentifyTopic -->|Параметр| LoadParamDocs[Загрузка документации параметра]
-    IdentifyTopic -->|План| LoadPlanDocs[Загрузка документации плана]
-    IdentifyTopic -->|Процесс| LoadProcessDocs[Загрузка документации процесса]
-    
-    LoadParamDocs --> ValidateContext{Проверка контекста}
-    LoadPlanDocs --> ValidateContext
-    LoadProcessDocs --> ValidateContext
-    
-    ValidateContext -->|Источник есть| CustomizeDocs[Персонализация документации]
-    ValidateContext -->|Общий запрос| PrepareGeneral[Подготовка общих материалов]
-    
-    CustomizeDocs --> AddExamples[Добавление примеров]
-    PrepareGeneral --> AddExamples
-    
-    AddExamples --> FormatContent[Форматирование контента]
-    FormatContent --> StructureResponse[Структурирование ответа]
-    
-    StructureResponse --> ShowDocs[Показать документацию]
-    ShowDocs --> OfferMore{Предложить дополнительно}
-    
-    OfferMore -->|Примеры| ShowExamples[Показать примеры]
-    OfferMore -->|Детали| ShowDetails[Показать детали]
-    OfferMore -->|Консультация| OfferSupport[Предложить поддержку]
-    
-    ShowExamples --> CheckUnderstanding{Проверка понимания}
-    ShowDetails --> CheckUnderstanding
-    OfferSupport --> CheckUnderstanding
-    
-    CheckUnderstanding -->|Понятно| EndDocs[Завершение]
-    CheckUnderstanding -->|Нужны пояснения| ClarifyDocs[Уточнение информации]
-    
-    ClarifyDocs --> ShowDocs
-----------------------------------------------------------------------------------------
-graph TD
-    Start[Входящий запрос] --> Intent{Определение намерения}
-    
-    Intent -->|Проверка баллов| Scenario1[Сценарий 1: Запрос индекса]
-    Intent -->|Новый источник| Scenario2[Сценарий 2: Новый источник]
-    Intent -->|Улучшение| Scenario3[Сценарий 3: Улучшения]
-    Intent -->|Смена плана| Scenario4[Сценарий 4: Смена плана]
-    Intent -->|История| Scenario5[Сценарий 5: История]
-    Intent -->|Разрыв| Scenario6[Сценарий 6: Анализ разрыва]
-    Intent -->|Параметр| Scenario7[Сценарий 7: Проверка параметра]
-    Intent -->|Документация| Scenario8[Сценарий 8: Документация]
-    
-    Scenario1 --> NextAction1{Следующее действие}
-    Scenario2 --> NextAction2{Следующее действие}
-    Scenario3 --> NextAction3{Следующее действие}
-    Scenario4 --> NextAction4{Следующее действие}
-    Scenario5 --> NextAction5{Следующее действие}
-    Scenario6 --> NextAction6{Следующее действие}
-    Scenario7 --> NextAction7{Следующее действие}
-    Scenario8 --> NextAction8{Следующее действие}
-    
-    NextAction1 -->|Улучшение| Scenario3
-    NextAction1 -->|Документация| Scenario8
-    
-    NextAction2 -->|Проверка| Scenario7
-    NextAction2 -->|Документация| Scenario8
-    
-    NextAction3 -->|Смена плана| Scenario4
-    NextAction3 -->|Параметр| Scenario7
-    
-    NextAction4 -->|Анализ разрыва| Scenario6
-    NextAction4 -->|История| Scenario5
-    
-    NextAction5 -->|Улучшение| Scenario3
-    NextAction5 -->|Разрыв| Scenario6
-    
-    NextAction6 -->|Документация| Scenario8
-    NextAction6 -->|Параметр| Scenario7
-    
-    NextAction7 -->|История| Scenario5
-    NextAction7 -->|Документация| Scenario8
-    
-    NextAction8 -->|Проверка| Scenario7
-    NextAction8 -->|Улучшение| Scenario3
-    
-    %% Общие действия для всех сценариев
-    NextAction1 -->|Завершить| End[Завершение диалога]
-    NextAction2 -->|Завершить| End
-    NextAction3 -->|Завершить| End
-    NextAction4 -->|Завершить| End
-    NextAction5 -->|Завершить| End
-    NextAction6 -->|Завершить| End
-    NextAction7 -->|Завершить| End
-    NextAction8 -->|Завершить| End
-----------------------------------------------------------------------------
-sequenceDiagram
-    actor User
-    participant AI_Agent as AI агент
-    participant Data_API as Data API
-    participant Confluence as Confluence
-    participant DB as База данных
-    participant Meta as META система
-    participant Calculator as Калькулятор индекса
-
-    User->>AI_Agent: Запрос индекса зрелости
-    AI_Agent->>Data_API: GET /source/{sourceName}
-    Data_API->>DB: Проверка существования источника
-    DB-->>Data_API: Результат проверки
-    Data_API-->>AI_Agent: Результат проверки
-
-    alt Источник не найден
-        AI_Agent->>User: Запрос названия сервиса
-        User->>AI_Agent: Название сервиса
-        AI_Agent->>Data_API: POST /source
-        Data_API->>DB: Создание записи в SOURCES
-    end
-
-    AI_Agent->>Data_API: GET /source/{sourceName}/plan
-    Data_API->>DB: Получение плана интеграции
-    Data_API-->>AI_Agent: План интеграции
-
-    AI_Agent->>Data_API: GET /parameters/{planId}
-    Data_API->>DB: Получение списка параметров
-    Data_API-->>AI_Agent: Список параметров
-
-    AI_Agent->>Confluence: GET /questionnaire/{sourceName}
-    
-    alt Опросный лист найден
-        Confluence-->>AI_Agent: Данные опросного листа
-        AI_Agent->>DB: Получение данных
-        
-        alt Данные в БД актуальны
-            DB-->>AI_Agent: Актуальные данные из БД
-        else Данные отсутствуют или устарели
-            AI_Agent->>Meta: Запрос данных
-            Meta-->>AI_Agent: Данные из META
-        end
-        
-        AI_Agent->>AI_Agent: Выбор значений для расчета
-    end
-
-    par Сбор данных
-        AI_Agent->>Data_API: POST /dialog-params
-        Data_API->>DB: Сохранение ответов в DIALOG_PARAMS
-        AI_Agent->>Data_API: GET /meta-params/{sourceName}
-        Data_API->>Meta: Запрос параметров
-        Meta-->>Data_API: Данные из META
-        Data_API->>DB: Сохранение в META_PARAMS
-    end
-
-    AI_Agent->>Data_API: GET /evaluation-parameters
-    Data_API->>DB: Получение весов параметров
-    Data_API-->>AI_Agent: Веса параметров
-
-    AI_Agent->>Calculator: POST /calculate-index
-    Calculator->>Calculator: Расчет индекса
-    Calculator-->>AI_Agent: Результат расчета
-
-    AI_Agent->>AI_Agent: Анализ результата
-    AI_Agent->>Data_API: POST /scores
-    Data_API->>DB: Сохранение оценок и итогового балла
-
-    AI_Agent->>Data_API: POST /dialog-history
-    Data_API->>DB: Сохранение истории диалога
-
-    AI_Agent->>User: Ответ с интерпретацией индекса зрелости
-------------------------------------------------------------------------------
-sequenceDiagram
-    actor User
-    participant Router_Agent as Router Agent
-    participant Action_Agent as Action Agent
-    participant Collector_Agent as Collector Agent
-    participant Validator_Agent as Validator Agent
-    participant Response_Agent as Response Agent
-    participant Data_API as Data API
-    participant Confluence as Confluence
-    participant DB as База данных
-    participant Meta as META система
-    participant Calculator as Калькулятор индекса
-
-    User->>Router_Agent: Запрос индекса зрелости
-    
-    Router_Agent->>Router_Agent: Определение сценария
-    Router_Agent->>Router_Agent: Выбор цепочки агентов
-    Router_Agent->>Action_Agent: Передача управления
-    
-    Action_Agent->>Action_Agent: Определение необходимых данных
-    Action_Agent->>Collector_Agent: Запрос на сбор данных
-    
-    Collector_Agent->>Data_API: GET /source/{sourceName}
-    Data_API->>DB: Проверка источника
-    DB-->>Data_API: Результат
-    Data_API-->>Collector_Agent: Данные источника
-    
-    Collector_Agent->>Confluence: GET /confluence/questionnaire/data/{sourceName}
-    Confluence-->>Collector_Agent: Данные опросного листа
-    
-    Collector_Agent->>Meta: GET /meta/source/{sourceName}/parameters
-    Meta-->>Collector_Agent: Мета-данные
-    
-    Collector_Agent->>Validator_Agent: Передача собранных данных
-    
-    Validator_Agent->>Validator_Agent: Проверка полноты данных
-    Validator_Agent->>Validator_Agent: Валидация значений
-    Validator_Agent->>Validator_Agent: Проверка актуальности
-    
-    Validator_Agent->>Action_Agent: Передача валидных данных
-    
-    Action_Agent->>Calculator: POST /calculate-index
-    Calculator-->>Action_Agent: Результат расчета
-    
-    Action_Agent->>Response_Agent: Передача результатов
-    
-    Response_Agent->>Response_Agent: Форматирование результата
-    Response_Agent->>Response_Agent: Добавление рекомендаций
-    Response_Agent->>User: Ответ с интерпретацией индекса
--------------------------------------------------------------------------
-sequenceDiagram
-    actor User
-    participant AI_Agent as AI агент
-    participant Data_API as Data API
-    participant Confluence as Confluence
-    participant DB as База данных
-    participant Meta as META система
-    participant Calculator as Калькулятор индекса
-
-    User->>AI_Agent: Запрос индекса зрелости
-    AI_Agent->>Data_API: GET /source/{sourceName}
-    Data_API->>DB: Проверка существования источника
-    DB-->>Data_API: Результат проверки
-    Data_API-->>AI_Agent: Результат проверки
-
-    rect rgb(191, 223, 255)
-    alt Источник не найден
-        AI_Agent->>User: Запрос названия сервиса
-        User->>AI_Agent: Название сервиса
-        AI_Agent->>Data_API: POST /source
-        Data_API->>DB: Создание записи в SOURCES
-    end
-    end
-
-    AI_Agent->>Data_API: GET /source/{sourceName}/plan
-    Data_API->>DB: Получение плана интеграции
-    Data_API-->>AI_Agent: План интеграции
-
-    AI_Agent->>Data_API: GET /parameters/{planId}
-    Data_API->>DB: Получение списка параметров
-    Data_API-->>AI_Agent: Список параметров
-
-    AI_Agent->>Confluence: GET /confluence/questionnaire/data/{sourceName}
-
-    rect rgb(191, 223, 255)
-    alt Опросный лист найден
-        Confluence-->>AI_Agent: GET /confluence/questionnaire/data/{sourceName}
-        AI_Agent->>DB: GET /source/{sourceName}/parameters
-        
-        rect rgb(255, 220, 220)
-        alt Данные в БД актуальны
-            DB-->>AI_Agent: Актуальные данные из БД
-        end
-        end
-        
-        rect rgb(255, 220, 220)
-        alt Данные отсутствуют или устарели
-            AI_Agent->>Meta: GET /meta/source/{sourceName}/parameters
-            Meta-->>AI_Agent: Данные из META
-        end
-        end
-        
-        AI_Agent->>AI_Agent: Формирование финального набора параметров
-    end
-    end
-
-    rect rgb(220, 190, 255)
-    par Сбор данных
-        AI_Agent->>Data_API: POST /dialog-params
-        Data_API->>DB: Сохранение ответов в DIALOG_PARAMS
-        AI_Agent->>Data_API: GET /meta-params/{sourceName}
-        Data_API->>Meta: Запрос параметров
-        Meta-->>Data_API: Данные из META
-        Data_API->>DB: Сохранение в META_PARAMS
-    end
-    end
-
-    AI_Agent->>Data_API: GET /evaluation-parameters
-    Data_API->>DB: Получение весов параметров
-    Data_API-->>AI_Agent: Веса параметров
-
-    AI_Agent->>Calculator: POST /calculate-index
-    Calculator->>Calculator: Расчет индекса
-    Calculator-->>AI_Agent: Результат расчета
-
-    AI_Agent->>AI_Agent: Анализ результата
-    AI_Agent->>Data_API: POST /scores
-    Data_API->>DB: Сохранение оценок и итогового балла
-
-    AI_Agent->>Data_API: POST /dialog-history
-    Data_API->>DB: Сохранение истории диалога
-
-    AI_Agent->>User: Ответ с интерпретацией индекса зрелости
------------------------------------------------------------------------------
-flowchart TD
-    A["Запрос оценки готовности источника"] --> B{"Есть КЭ источника?"}
-    B -->|Да| C{"Найдена информация\nв БД по КЭ?"}
-    B -->|Нет| D["Запросить КЭ у пользователя"]
-    D --> B
-    
-    C -->|Да| E["UC-1: Запуск оценки\nготовности источника"]
-    C -->|Нет| F{"Есть план загрузки?"}
-    
-    F -->|Да| G["UC-1.1: Извлечение списка\nкритериев из БД"]
-    F -->|Нет| H["Запросить план загрузки\nу пользователя"]
-    H --> F
-    
-    G --> G1{"БД доступна?"}
-    G1 -->|Да| G2{"Критерии найдены?"}
-    G1 -->|Нет| G3["Уведомление о проблеме\nдоступа к БД"]
-    G3 --> Z["Завершение с ошибкой"]
-    
-    G2 -->|Да| I["Сбор данных для критериев"]
-    G2 -->|Нет| G4["Уведомление об отсутствии\nкритериев оценки"]
-    G4 --> Z
-    
-    I --> J["UC-3: Сбор критериев\nиз внешних систем"]
-    I --> K["UC-5: Сбор данных\nиз опросного листа"]
-    
-    J --> J1{"Соединение с\nисточником данных?"}
-    J1 -->|Да| J2{"Данные найдены?"}
-    J1 -->|Нет| J3["Уведомление о проблеме\nдоступа к источнику"]
-    J3 --> J5["Предложение альтернативных\nисточников данных"]
-    
-    J2 -->|Да| J4["Сохранение данных\nдля расчета"]
-    J2 -->|Нет| J6["Уведомление об\nотсутствии данных"]
-    J6 --> J5
-    J5 --> I
-    J4 --> L
-    
-    K --> K1{"Опросный лист\nна сайте?"}
-    K1 -->|Да| K2{"Опросный лист\nзаполнен?"}
-    K1 -->|Нет| K3{"Ссылка на Confluence\nпредоставлена?"}
-    
-    K2 -->|Да| K4["Извлечение данных\nиз опросного листа"]
-    K2 -->|Нет| K5["Запрос на заполнение\nопросного листа"]
-    K5 --> K1
-    
-    K3 -->|Да| K6{"Ссылка корректна\nи доступна?"}
-    K3 -->|Нет| K7["Запрос корректной\nссылки"]
-    K7 --> K3
-    
-    K6 -->|Да| K8["Извлечение данных\nиз Confluence"]
-    K6 -->|Нет| K9["Уведомление о проблеме\nс доступом к Confluence"]
-    K9 --> K7
-    
-    K4 --> L["Расчет индекса\nготовности"]
-    K8 --> L
-    
-    E --> L
-    
-    L --> M{"Пользователь согласен\nс оценкой?"}
-    
-    M -->|Да| N["Сохранение результатов"]
-    M -->|Нет| O["UC-4: Обоснование\nоценки"]
-    
-    O --> O1{"Параметр найден\nв базе оценок?"}
-    O1 -->|Да| O2["Формирование объяснения\nс критериями и источниками"]
-    O1 -->|Нет| O3["Уведомление о невозможности\nпредоставить объяснение"]
-    O3 --> O4["Предложение списка\nдоступных параметров"]
-    O4 --> O
-    
-    O2 --> P{"Пользователь предоставил\nдополнительные данные?"}
-    
-    P -->|Да| P1["Анализ новых данных"]
-    P1 --> P2{"Данные подтверждены?"}
-    P2 -->|Да| Q["Пересчет оценки\nпараметра"]
-    P2 -->|Нет| O2
-    
-    P -->|Нет| R["UC-2: Рекомендации по\nповышению индекса"]
-    
-    R --> R1{"Готовые рекомендации\nдоступны?"}
-    R1 -->|Да| R2["Формирование конкретных\nинструкций по улучшению"]
-    R1 -->|Нет| R3{"Анализ документации\nвозможен?"}
-    
-    R3 -->|Да| R4["Анализ текущих\nпоказателей и документации"]
-    R3 -->|Нет| R5["Предложение консультации\nс экспертом"]
-    
-    R4 --> R2
-    R5 --> N
-    R2 --> N
-    
-    Q --> N
-    
-    N --> S["Ожидание дальнейших\nзапросов пользователя"]
------------------------------------------------------------------------------------
-flowchart TD
-    A["Запрос оценки готовности источника"] --> B{"Есть КЭ источника?"}
-    B -->|Да| C{"Найдена информация\nв БД по КЭ?"}
-    B -->|Нет| D["Запросить КЭ у пользователя"]
-    D --> B
-    
-    C -->|Да| E["UC-1: Запуск оценки\nготовности источника"]
-    C -->|Нет| F["Запрос базовой информации\nоб источнике"]
-    
-    F --> G["Регистрация нового источника\nв системе"]
-    G --> H["Создание плана загрузки\nдля нового источника"]
-    H --> I["UC-1.1: Извлечение списка\nкритериев из БД"]
-    
-    E --> J{"План загрузки актуален?"}
-    J -->|Да| I
-    J -->|Нет| K["Обновление плана загрузки"]
-    K --> I
-    
-    I --> I1{"БД доступна?"}
-    I1 -->|Да| I2{"Критерии найдены?"}
-    I1 -->|Нет| I3["Уведомление о проблеме\nдоступа к БД"]
-    I3 --> Z["Завершение с ошибкой"]
-    
-    I2 -->|Да| L["Сбор данных для критериев"]
-    I2 -->|Нет| I4["Уведомление об отсутствии\nкритериев оценки"]
-    I4 --> Z
-    
-    L --> M["UC-3: Сбор критериев\nиз внешних систем"]
-    L --> N["UC-5: Сбор данных\nиз опросного листа"]
-    
-    M --> M1{"Соединение с\nисточником данных?"}
-    M1 -->|Да| M2{"Данные найдены?"}
-    M1 -->|Нет| M3["Уведомление о проблеме\nдоступа к источнику"]
-    M3 --> M5["Предложение альтернативных\nисточников данных"]
-    
-    M2 -->|Да| M4["Сохранение данных\nдля расчета"]
-    M2 -->|Нет| M6["Уведомление об\nотсутствии данных"]
-    M6 --> M5
-    M5 --> L
-    M4 --> O
-    
-    N --> N1{"Опросный лист\nна сайте?"}
-    N1 -->|Да| N2{"Опросный лист\nзаполнен?"}
-    N1 -->|Нет| N3{"Ссылка на Confluence\nпредоставлена?"}
-    
-    N2 -->|Да| N4["Извлечение данных\nиз опросного листа"]
-    N2 -->|Нет| N5["Запрос на заполнение\nопросного листа"]
-    N5 --> N1
-    
-    N3 -->|Да| N6{"Ссылка корректна\nи доступна?"}
-    N3 -->|Нет| N7["Запрос корректной\nссылки"]
-    N7 --> N3
-    
-    N6 -->|Да| N8["Извлечение данных\nиз Confluence"]
-    N6 -->|Нет| N9["Уведомление о проблеме\nс доступом к Confluence"]
-    N9 --> N7
-    
-    N4 --> O["Расчет индекса\nготовности"]
-    N8 --> O
-    
-    O --> P{"Пользователь согласен\nс оценкой?"}
-    
-    P -->|Да| Q["Сохранение результатов"]
-    P -->|Нет| R["UC-4: Обоснование\nоценки"]
-    
-    R --> R1{"Параметр найден\nв базе оценок?"}
-    R1 -->|Да| R2["Формирование объяснения\nс критериями и источниками"]
-    R1 -->|Нет| R3["Уведомление о невозможности\nпредоставить объяснение"]
-    R3 --> R4["Предложение списка\nдоступных параметров"]
-    R4 --> R
-    
-    R2 --> S{"Пользователь предоставил\nдополнительные данные?"}
-    
-    S -->|Да| S1["Анализ новых данных"]
-    S1 --> S2{"Данные подтверждены?"}
-    S2 -->|Да| T["Пересчет оценки\nпараметра"]
-    S2 -->|Нет| R2
-    
-    S -->|Нет| U["UC-2: Рекомендации по\nповышению индекса"]
-    
-    U --> U1{"Готовые рекомендации\nдоступны?"}
-    U1 -->|Да| U2["Формирование конкретных\nинструкций по улучшению"]
-    U1 -->|Нет| U3{"Анализ документации\nвозможен?"}
-    
-    U3 -->|Да| U4["Анализ текущих\nпоказателей и документации"]
-    U3 -->|Нет| U5["Предложение консультации\nс экспертом"]
-    
-    U4 --> U2
-    U5 --> Q
-    U2 --> Q
-    
-    T --> Q
-    
-    Q --> V["Ожидание дальнейших\nзапросов пользователя"]
---------------------------------------------------------------------------------
-flowchart TD
-    A["Запрос оценки готовности источника"] --> B{"Есть КЭ источника?"}
-    B -->|Да| C{"Найдена информация\nв БД по КЭ?"}
-    B -->|Нет| D["Запросить КЭ у пользователя"]
-    D --> B
-    
-    C -->|Да| E["UC-1: Запуск оценки\nготовности источника"]
-    C -->|Нет| F["Запрос базовой информации\nоб источнике"]
-    
-    F --> G["Регистрация нового источника\nв системе"]
-    G --> E
-    
-    E --> J{"План загрузки актуален?"}
-    J -->|Да| I["UC-1.1: Извлечение списка\nкритериев из БД"]
-    J -->|Нет| K["Обновление плана загрузки"]
-    K --> I
-    
-    I --> I1{"БД доступна?"}
-    I1 -->|Да| I2{"Критерии найдены?"}
-    I1 -->|Нет| I3["Уведомление о проблеме\nдоступа к БД"]
-    I3 --> Z["Завершение с ошибкой"]
-    
-    I2 -->|Да| L["Сбор данных для критериев"]
-    I2 -->|Нет| I4["Уведомление об отсутствии\nкритериев оценки"]
-    I4 --> Z
-    
-    L --> M["UC-3: Сбор критериев\nиз внешних систем"]
-    L --> N["UC-5: Сбор данных\nиз опросного листа"]
-    
-    M --> M1{"Соединение с\nисточником данных?"}
-    M1 -->|Да| M2{"Данные найдены?"}
-    M1 -->|Нет| M3["Уведомление о проблеме\nдоступа к источнику"]
-    M3 --> M5["Предложение альтернативных\nисточников данных"]
-    
-    M2 -->|Да| M4["Сохранение данных\nдля расчета"]
-    M2 -->|Нет| M6["Уведомление об\nотсутствии данных"]
-    M6 --> M5
-    M5 --> L
-    M4 --> O
-    
-    N --> N1{"Опросный лист\nна сайте?"}
-    N1 -->|Да| N2{"Опросный лист\nзаполнен?"}
-    N1 -->|Нет| N3{"Ссылка на Confluence\nпредоставлена?"}
-    
-    N2 -->|Да| N4["Извлечение данных\nиз опросного листа"]
-    N2 -->|Нет| N5["Запрос на заполнение\nопросного листа"]
-    N5 --> N1
-    
-    N3 -->|Да| N6{"Ссылка корректна\nи доступна?"}
-    N3 -->|Нет| N7["Запрос корректной\nссылки"]
-    N7 --> N3
-    
-    N6 -->|Да| N8["Извлечение данных\nиз Confluence"]
-    N6 -->|Нет| N9["Уведомление о проблеме\nс доступом к Confluence"]
-    N9 --> N7
-    
-    N4 --> O["Расчет индекса\nготовности"]
-    N8 --> O
-    
-    O --> P{"Пользователь согласен\nс оценкой?"}
-    
-    P -->|Да| Q["Сохранение результатов"]
-    P -->|Нет| R["UC-4: Обоснование\nоценки"]
-    
-    Q --> S{"Пользователь хочет\nполучить рекомендации?"}
-    S -->|Да| U["UC-2: Рекомендации по\nповышению индекса"]
-    S -->|Нет| V["Ожидание дальнейших\nзапросов пользователя"]
-    
-    R --> R1{"Параметр найден\nв базе оценок?"}
-    R1 -->|Да| R2["Формирование объяснения\nс критериями и источниками"]
-    R1 -->|Нет| R3["Уведомление о невозможности\nпредоставить объяснение"]
-    R3 --> R4["Предложение списка\nдоступных параметров"]
-    R4 --> R
-    
-    R2 --> T{"Пользователь предоставил\nдополнительные данные?"}
-    
-    T -->|Да| T1["Анализ новых данных"]
-    T1 --> T2{"Данные подтверждены?"}
-    T2 -->|Да| T3["Пересчет оценки\nпараметра"]
-    T2 -->|Нет| R2
-    
-    T -->|Нет| U
-    
-    U --> U1{"Готовые рекомендации\nдоступны?"}
-    U1 -->|Да| U2["Формирование конкретных\nинструкций по улучшению"]
-    U1 -->|Нет| U3{"Анализ документации\nвозможен?"}
-    
-    U3 -->|Да| U4["Анализ текущих\nпоказателей и документации"]
-    U3 -->|Нет| U5["Предложение консультации\nс экспертом"]
-    
-    U4 --> U2
-    U5 --> Q
-    U2 --> Q
-    
-    T3 --> Q
------------------------------------------------------------------------------
-flowchart TD
-    A["Запрос оценки готовности источника"] --> B{"Есть КЭ источника?"}
-    B -->|Да| C{"Найдена информация\nв БД по КЭ?"}
-    B -->|Нет| D["Запросить КЭ у пользователя"]
-    D --> B
-    
-    C -->|Да| E["UC-1: Запуск оценки\nготовности источника"]
-    C -->|Нет| F["Запрос базовой информации\nоб источнике"]
-    
-    F --> G["Регистрация нового источника\nв системе"]
-    G --> E
-    
-    E --> J{"План загрузки актуален?"}
-    J -->|Да| I["UC-1.1: Извлечение списка\nкритериев из БД"]
-    J -->|Нет| K["Обновление плана загрузки"]
-    K --> I
-    
-    I --> I1{"БД доступна?"}
-    I1 -->|Да| I2{"Критерии найдены?"}
-    I1 -->|Нет| I3["Уведомление о проблеме\nдоступа к БД"]
-    I3 --> Z["Завершение с ошибкой"]
-    
-    I2 -->|Да| L["Сбор данных для критериев"]
-    I2 -->|Нет| I4["Уведомление об отсутствии\nкритериев оценки"]
-    I4 --> Z
-    
-    L --> M["UC-3: Сбор критериев\nиз внешних систем"]
-    L --> N["UC-5: Сбор данных\nиз опросного листа"]
-    
-    M --> M1{"Соединение с\nисточником данных?"}
-    M1 -->|Да| M2{"Данные найдены?"}
-    M1 -->|Нет| M3["Уведомление о проблеме\nдоступа к источнику"]
-    M3 --> M5["Предложение альтернативных\nисточников данных"]
-    
-    M2 -->|Да| M4["Сохранение данных\nдля расчета"]
-    M2 -->|Нет| M6["Уведомление об\nотсутствии данных"]
-    M6 --> M5
-    M5 --> L
-    M4 --> O
-    
-    N --> N1{"Опросный лист\nна сайте?"}
-    N1 -->|Да| N2{"Опросный лист\nзаполнен?"}
-    N1 -->|Нет| N3{"Ссылка на Confluence\nпредоставлена?"}
-    
-    N2 -->|Да| N4["Извлечение данных\nиз опросного листа"]
-    N2 -->|Нет| N5["Запрос на заполнение\nопросного листа"]
-    N5 --> N1
-    
-    N3 -->|Да| N6{"Ссылка корректна\nи доступна?"}
-    N3 -->|Нет| N7["Запрос корректной\nссылки"]
-    N7 --> N3
-    
-    N6 -->|Да| N8["Извлечение данных\nиз Confluence"]
-    N6 -->|Нет| N9["Уведомление о проблеме\nс доступом к Confluence"]
-    N9 --> N7
-    
-    N4 --> O["Расчет индекса\nготовности"]
-    N8 --> O
-    
-    O --> P{"Пользователь согласен\nс оценкой?"}
-    
-    P -->|Да| Q["Сохранение результатов"]
-    P -->|Нет| R["UC-4: Обоснование\nоценки"]
-    
-    Q --> S{"Пользователь хочет\nполучить рекомендации?"}
-    S -->|Да| U["UC-2: Рекомендации по\nповышению индекса"]
-    S -->|Нет| V["Ожидание дальнейших\nзапросов пользователя"]
-    
-    R --> R1{"Параметр найден\nв базе оценок?"}
-    R1 -->|Да| R2["Формирование объяснения\nс критериями и источниками"]
-    R1 -->|Нет| R3["Уведомление о невозможности\nпредоставить объяснение"]
-    R3 --> R4["Предложение списка\nдоступных параметров"]
-    R4 --> R
-    
-    R2 --> T{"Пользователь предоставил\nдополнительные данные?"}
-    
-    T -->|Да| T1["Анализ новых данных"]
-    T1 --> T2{"Данные подтверждены?"}
-    T2 -->|Да| T3["Пересчет оценки\nпараметра"]
-    T2 -->|Нет| R2
-    
-    T -->|Нет| U
-    
-    U --> U1{"Готовые рекомендации\nдоступны?"}
-    U1 -->|Да| U2["Формирование конкретных\nинструкций по улучшению"]
-    U1 -->|Нет| U3{"Анализ документации\nвозможен?"}
-    
-    U3 -->|Да| U4["Анализ текущих\nпоказателей и документации"]
-    U3 -->|Нет| U5["Предложение консультации\nс экспертом"]
-    
-    U4 --> U2
-    U5 --> Q
-    U2 --> Q
-    
-    T3 --> Q
--------------------------------------------------------------------------------
-%%{init: { 'logLevel': 'debug', 'theme': 'default' , 'themeVariables': { 'cScale2': '#90EE90' } } }%%
-timeline
-    title План реализации Use cases
-
-    section 1 квартал 2025
-        Проверка баллов : UC-1 Оценка готовности источника к интеграции : Пользователь запрашивает текущий индекс готовности источника, ИИ-агент извлекает и предоставляет эту информацию.
-
-    section 2 квартал 2025
-        Новый источник : UC-1.1 "Извлечение списка критериев из БД" : UC-0 "Расчет индекса готовности" : UC-3 "Сбор критериев из внешних систем" : UC-5 "сбор данных из опросного листа"
-        Рекомендации : UC-2 Повышение индекса : Пользователь запрашивает шаги для улучшения показателей источника.
-        
-
-    section 3-4 квартал 2025
-    Аргументация оценки : UC-4 Аргументация оценки : Предоставления детального объяснения по оценке каждого параметра, включая источники данных и методику расчета.
-        Смена плана : позволяет корректировать цели и планы интеграции
-        Прогресс источника : UC-6 Мониторинг изменений : ИИ-агент периодически проверяет Базу знаний и выполняет пересчет индекса.
----------------------------------------------------------------------------------
-graph TD;
-    subgraph "Пользовательский слой"
-        UI["Пользовательский интерфейс"] --> Gateway["Модуль API Gateway"]
-    end
-    
-    subgraph "Слой ИИ-агента"
-        Gateway --> Orchestrator["Модуль оркестрации"]
-        Orchestrator --> AnalysisModule["Модуль анализа запросов"]
-        Orchestrator --> PlanningModule["Модуль планирования"]
-        Orchestrator --> IndexModule["Модуль расчета индексов"]
-        Orchestrator --> RecommendModule["Модуль рекомендаций"]
-        
-        subgraph "Модуль планирования"
-            PlanningCore["Ядро планирования"]
-            ConnectorManager["Подмодуль управления коннекторами"]
-            PlanningCore --> ConnectorManager
-        end
-        
-        subgraph "Коннекторы"
-            ConnectorManager --> ConfluenceConnector["Коннектор Confluence"]
-            ConnectorManager --> JiraConnector["Коннектор Jira"]
-            ConnectorManager --> MetaConnector["Коннектор Meta"]
-            ConnectorManager --> SMConnector["Коннектор SM"]
-            ConnectorManager --> BitBucketConnector["Коннектор BitBucket"]
-        end
-    end
-    
-    subgraph "Бэкенд-слой"
-        ConfluenceConnector --> BackendAPI["Модуль API бэкенда"]
-        JiraConnector --> BackendAPI
-        MetaConnector --> BackendAPI
-        SMConnector --> BackendAPI
-        BitBucketConnector --> BackendAPI
-        
-        BackendAPI --> SwaggerSpec["Модуль Swagger-спецификаций"]
-        SwaggerSpec -.-> ConnectorManager
-        
-        BackendAPI --> AuthModule["Модуль аутентификации и авторизации"]
-        BackendAPI --> DataCollectionModule["Модуль сбора данных"]
-        BackendAPI --> TransformationModule["Модуль трансформации данных"]
-        BackendAPI --> StorageModule["Модуль хранения данных"]
-        
-        DataCollectionModule --> ConfluenceAdapter["Адаптер Confluence"]
-        DataCollectionModule --> JiraAdapter["Адаптер Jira"]
-        DataCollectionModule --> MetaAdapter["Адаптер Meta"]
-        DataCollectionModule --> SMAdapter["Адаптер SM"]
-        DataCollectionModule --> BitBucketAdapter["Адаптер BitBucket"]
-        
-        TransformationModule --> StorageModule
-        StorageModule --> RepoDB["Репозиторий БД"]
-        StorageModule --> VectorDB["VectorBD"]
-        
-        IndexModule --> BackendAPI
-        RecommendModule --> BackendAPI
-    end
-    
-    subgraph "Слой внешних систем"
-        ConfluenceAdapter --> Confluence["Confluence API"]
-        JiraAdapter --> Jira["Jira API"]
-        MetaAdapter --> Meta["Meta API"]
-        SMAdapter --> SM["SM API"]
-        BitBucketAdapter --> BitBucket["BitBucket API"]
-    end
------------------------------------------------------------------------------------
-graph TB
-    subgraph "MCP Architecture"
-        MCP[Master Control Program] --> AgentManager
-        MCP --> TaskManager
-        MCP --> StateManager
-        MCP --> MonitoringSystem
-        
-        AgentManager --> AgentRegistry
-        AgentManager --> AgentCoordinator
-        
-        TaskManager --> TaskQueue
-        TaskManager --> TaskDistributor
-        
-        StateManager --> StateStore
-        StateManager --> ConfigManager
-        
-        MonitoringSystem --> MetricsCollector
-        MonitoringSystem --> HealthChecker
-    end
-
-    subgraph "Documentation Agent System"
-        API[FastAPI Application] --> DocAgent[Documentation Agent]
-        
-        DocAgent --> Retriever[Text Retriever]
-        DocAgent --> GigaChat[GigaChat API]
-        DocAgent --> Memory[Agent Memory]
-        
-        Retriever --> VectorDB[(Vector Database)]
-        Retriever --> Embeddings[Embeddings Model]
-        
-        subgraph "Features"
-            Retriever --> ContextExpander
-            Retriever --> KnowledgeBase
-            Retriever --> QuestionMatcher
-        end
-        
-        Memory --> ConversationHistory
-        Memory --> CachedResponses
-    end
-
-    subgraph "Data Flow"
-        Client --> API
-        API --> |Request| DocAgent
-        DocAgent --> |Query| Retriever
-        Retriever --> |Context| DocAgent
-        DocAgent --> |Prompt| GigaChat
-        GigaChat --> |Response| DocAgent
-        DocAgent --> |Formatted Answer| API
-    end
-
-    subgraph "Integration Layer"
-        MCP --> |Registers| DocAgent
-        MCP --> |Monitors| DocAgent
-        MCP --> |Manages State| DocAgent
-    end
-
-    classDef mcp fill:#f96,stroke:#333,stroke-width:2px;
-    classDef current fill:#bbf,stroke:#333,stroke-width:2px;
-    classDef data fill:#dfd,stroke:#333,stroke-width:2px;
-    
-    class MCP,AgentManager,TaskManager,StateManager,MonitoringSystem mcp;
-    class API,DocAgent,Retriever,GigaChat,Features current;
-    class VectorDB,ConversationHistory,CachedResponses data;
-----------------------------------------------------------------------------
-sequenceDiagram
-    participant Client
-    participant API
-    participant DocAgent
-    participant Retriever
-    participant GigaChat
-    participant MCP
-
-    Client->>API: Send Query
-    API->>MCP: Register Request
-    MCP->>DocAgent: Assign Task
-    
-    DocAgent->>Retriever: Get Relevant Context
-    Retriever-->>DocAgent: Return Context
-    
-    DocAgent->>GigaChat: Generate Response
-    GigaChat-->>DocAgent: Return Response
-    
-    DocAgent->>DocAgent: Validate & Format
-    DocAgent-->>API: Return Answer
-    API-->>Client: Send Response
-    
-    DocAgent->>MCP: Update State
-    MCP->>MonitoringSystem: Log Metrics
-----------------------------------------------------------------------------
-### Детальное описание компонентов системы ИИ-агента
-
-## 1. Пользовательский слой
-
-### Пользовательский интерфейс
-
-- **Назначение**: Обеспечивает взаимодействие пользователя с ИИ-агентом
-- **Функциональность**:
-
-- Отображение диалогового окна для общения с агентом
-- Ввод запросов пользователя
-- Визуализация результатов расчета индексов зрелости
-- Отображение рекомендаций по улучшению индексов
-
-
-
-
-
-### Модуль API Gateway
-
-- **Назначение**: Единая точка входа для всех запросов к системе
-- **Функциональность**:
-
-- Маршрутизация запросов к соответствующим компонентам
-- Аутентификация и авторизация пользователей
-- Балансировка нагрузки
-- Логирование запросов
-
-
-
-
-
-## 2. Слой ИИ-агента
-
-### Модуль оркестрации
-
-- **Назначение**: Центральный компонент, координирующий работу всех модулей агента
-- **Функциональность**:
-
-- Управление жизненным циклом запроса
-- Координация взаимодействия между модулями
-- Обработка ошибок и исключительных ситуаций
-- Мониторинг состояния выполнения задач
-
-
-
-
-
-### Модуль анализа запросов
-
-- **Назначение**: Определяет намерение пользователя и необходимую информацию
-- **Функциональность**:
-
-- Парсинг и анализ текста запроса
-- Извлечение ключевых сущностей и параметров
-- Классификация типа запроса (расчет индекса, получение рекомендаций)
-- Определение контекста запроса
-
-
-
-
-
-### Модуль планирования
-
-- **Назначение**: Создает план действий для выполнения запроса
-- **Функциональность**:
-
-- **Ядро планирования**:
-
-- Определение последовательности шагов для выполнения запроса
-- Формирование параметров для активации коннекторов
-- Адаптация плана при получении новой информации
-
-
-
-- **Подмодуль управления коннекторами**:
-
-- Выбор подходящих коннекторов для выполнения задач
-- Активация коннекторов с нужными параметрами
-- Мониторинг состояния коннекторов
-- Загрузка Swagger-спецификаций от бэкенда
-
-
-
-
-
-
-
-
-### Коннекторы
-
-- **Назначение**: Программные компоненты для взаимодействия с бэкендом
-- **Функциональность**:
-
-- **Коннектор Confluence**:
-
-- Формирование запросов к бэкенду для получения данных из Confluence
-- Интерпретация ответов от бэкенда
-- Извлечение информации о документации и ее структуре
-
-
-
-- **Коннектор Jira**:
-
-- Формирование запросов к бэкенду для получения данных из Jira
-- Интерпретация ответов от бэкенда
-- Извлечение информации о задачах, проектах и метриках
-
-
-
-- **Коннектор Meta**:
-
-- Формирование запросов к бэкенду для получения метаданных
-- Интерпретация ответов от бэкенда
-- Извлечение метаданных о проектах и компонентах
-
-
-
-- **Коннектор SM**:
-
-- Формирование запросов к бэкенду для получения данных о сервисных запросах
-- Интерпретация ответов от бэкенда
-- Извлечение информации об инцидентах и проблемах
-
-
-
-- **Коннектор BitBucket**:
-
-- Формирование запросов к бэкенду для получения данных из репозиториев
-- Интерпретация ответов от бэкенда
-- Извлечение информации о коде и процессах разработки
-
-
-
-
-
-
-
-
-### Модуль расчета индексов
-
-- **Назначение**: Вычисляет индекс зрелости на основе полученных данных
-- **Функциональность**:
-
-- Применение алгоритмов расчета индексов к полученным данным
-- Нормализация и агрегация показателей
-- Сравнение с историческими данными
-- Выявление трендов и аномалий
-
-
-
-
-
-### Модуль рекомендаций
-
-- **Назначение**: Формирует рекомендации по улучшению индексов
-- **Функциональность**:
-
-- Анализ факторов, влияющих на индекс зрелости
-- Генерация конкретных рекомендаций по улучшению
-- Приоритизация рекомендаций по эффективности и сложности реализации
-- Персонализация рекомендаций в зависимости от контекста
-
-
-
-
-
-## 3. Бэкенд-слой
-
-### Модуль API бэкенда
-
-- **Назначение**: Предоставляет унифицированный интерфейс для взаимодействия с бэкендом
-- **Функциональность**:
-
-- Обработка запросов от коннекторов
-- Маршрутизация запросов к соответствующим модулям
-- Предоставление Swagger-спецификаций для коннекторов
-- Управление аутентификацией и авторизацией
-
-
-
-
-
-### Модуль аутентификации и авторизации
-
-- **Назначение**: Обеспечивает безопасный доступ к бэкенду и внешним системам
-- **Функциональность**:
-
-- Проверка учетных данных
-- Управление токенами доступа
-- Контроль прав доступа к различным ресурсам
-- Аудит действий пользователей
-
-
-
-
-
-### Модуль сбора данных
-
-- **Назначение**: Отвечает за получение данных из внешних источников
-- **Функциональность**:
-
-- Управление адаптерами для различных внешних систем
-- Обработка запросов на получение данных
-- Кэширование часто запрашиваемых данных
-- Обработка ошибок при взаимодействии с внешними системами
-
-
-
-
-
-### Адаптеры внешних систем
-
-- **Назначение**: Обеспечивают взаимодействие с конкретными внешними системами
-- **Функциональность**:
-
-- **Адаптер Confluence**:
-
-- Формирование HTTP-запросов к API Confluence
-- Обработка ответов от Confluence
-- Преобразование данных в унифицированный формат
-
-
-
-- **Адаптер Jira**:
-
-- Формирование HTTP-запросов к API Jira
-- Обработка ответов от Jira
-- Преобразование данных в унифицированный формат
-
-
-
-- **Адаптер Meta**:
-
-- Формирование HTTP-запросов к API Meta
-- Обработка ответов от Meta
-- Преобразование данных в унифицированный формат
-
-
-
-- **Адаптер SM**:
-
-- Формирование HTTP-запросов к API SM
-- Обработка ответов от SM
-- Преобразование данных в унифицированный формат
-
-
-
-- **Адаптер BitBucket**:
-
-- Формирование HTTP-запросов к API BitBucket
-- Обработка ответов от BitBucket
-- Преобразование данных в унифицированный формат
-
-
-
-
-
-
-
-
-### Модуль трансформации данных
-
-- **Назначение**: Обрабатывает и преобразует данные из различных источников
-- **Функциональность**:
-
-- Нормализация данных из разных источников
-- Обогащение данных дополнительной информацией
-- Агрегация данных по различным измерениям
-- Подготовка данных для хранения и анализа
-
-
-
-
-
-### Модуль хранения данных
-
-- **Назначение**: Управляет хранением и доступом к данным
-- **Функциональность**:
-
-- Управление соединениями с базами данных
-- Реализация паттернов доступа к данным
-- Кэширование и оптимизация запросов
-- Обеспечение целостности и согласованности данных
-
-
-
-
-
-### Репозиторий БД
-
-- **Назначение**: Хранение структурированных данных
-- **Функциональность**:
-
-- Хранение нормализованных данных из источников
-- Хранение результатов расчетов индексов
-- Хранение исторических данных для анализа трендов
-- Обеспечение целостности и согласованности данных
-
-
-
-
-
-### VectorBD
-
-- **Назначение**: Векторное хранилище для семантического поиска и анализа
-- **Функциональность**:
-
-- Хранение векторных представлений текстовых данных
-- Обеспечение быстрого семантического поиска
-- Поддержка кластеризации и классификации данных
-- Хранение эмбеддингов для ИИ-моделей
-
-
-
-
-
-## 4. Слой внешних систем
-
-### Внешние системы
-
-- **Назначение**: Предоставление исходных данных для анализа
-- **Системы**:
-
-- **Confluence**: Хранение документации и знаний
-- **Jira**: Управление задачами и проектами
-- **Meta**: Хранение метаданных о проектах и компонентах
-- **SM**: Управление сервисными запросами и инцидентами
-- **BitBucket**: Хранение исходного кода и управлениями версиями
-
-==========================================================================
-### 3. Детальное описание взаимодействия:
-
-#### Шаг 1: Анализ запроса (Модуль анализа запросов)
-
-**Входные данные**:
-**Процесс**:
-
-1. Модуль анализа запросов разбивает текст на токены
-2. Определяет намерение пользователя: "расчет_индекса"
-3. Извлекает ключевые сущности: проект = "Альфа"
-4. Определяет дополнительные параметры: требуется_рекомендация = true
-
-#### Шаг 2: Планирование действий (Модуль планирования)
-
-**Входные данные**:
-**Процесс**:
-
-1. Модуль планирования определяет, что для расчета индекса зрелости нужны следующие метрики:
-
-1. Качество кода (из BitBucket)
-2. Скорость разработки (из Jira)
-3. Полнота документации (из Confluence)
-4. История инцидентов (из SM)
-
-
-
-2. Подмодуль управления коннекторами определяет необходимые коннекторы:
-Модуль планирования активирует коннекторы с соответствующими параметрами:
-Коннекторы формируют запросы к бэкенду, получают данные и обрабатывают их
-#### Шаг 3-5: Завершение обработки (Модуль оркестрации)
-
-Модуль оркестрации координирует дальнейшую обработку:
-
-1. Передает полученные данные в модуль расчета индексов
-2. Получает результат расчета индекса зрелости
-3. Передает результат в модуль рекомендаций
-4. Получает список рекомендаций
-5. Формирует итоговый ответ для пользователя
-===================================================================================================
-## Детальное описание работы с Kafka
-
-### 1. Особенности Kafka-адаптера
-
-- **Модель взаимодействия**: В отличие от HTTP, где используется модель запрос-ответ, Kafka использует модель публикации/подписки
-- **Потоковая обработка**: Данные поступают непрерывным потоком, а не дискретными ответами на запросы
-- **Буферизация**: Адаптер должен буферизовать и агрегировать данные из потока
-- **Фильтрация**: Фильтрация данных происходит на стороне потребителя (адаптера), а не на стороне сервера
-===================================================================================================
-
-1/2
-В этой демонстрации мы наблюдаем:
-
-Список источников с рассчитанными ИИ индексами. Каждая запись показывает как числовые значения, так и подробные комментарии по каждому источнику.
-
-Мы выбираем интересующий нас источник из списка.
-
-Рассматриваем список критериев, по которым производился расчет индекса.
-
-Замечаем, что критерий 'интеграционное взаимодействие' имеет 0 баллов.
-
-Обращаемся к ИИ-агенту с вопросом о том, как повысить индекс.
-
-Получаем конкретные рекомендации от ИИ.
-
-идем выполнять рекомендации
-
-2/2
-В продолжении демонстрации мы видим:
-
-Выполнили все полученные рекомендаци от ИИ-агента ИЗИкс
-
-Возвращение в интерфейс ИЗИкс для проверки результатов
-
-Запуск процесса пересчета индекса
-
-Получение нового результата - 40 баллов
-
-Просмотр подробной детализации по начисленным 40 баллам, где наглядно представлен расчет по каждому критерию
-
-Обновление страницы и подтверждение актуализации данных на сайте в реальном времени
-
-Переход во вкладку 'История', где представлена наглядная динамика изменений индекса во времени
-
-Солюшн
-https://mermaid.live/edit#pako:eNqdV9tu20YQ_RWCRfokGXEk68KHApJVFCoqNCjjPjTqw5pcSUSopcALbNUxENlxWiAt0gB9CIoCbb-gSurAcnzRLyz_qLNLiTdxydQyTHK5cw5nZw5nlkeyZulYVuShjSYj6VGnTyT43bsnqe7UNMgwGGsmcpwOHkgT2xgjeyoNDNNUPnlQqVfRfslxbesJDoeaZVq2cjAyXJxCO1iziB7hqw3URLUQvxqK8S62XSMG36_imh7Bg6EYjg-BgCBzBW9o1Ua1EsJXwwQ8jMaeg23pKzTFdnDL8faDiLEJfv9xX6Z_0lt65f9ML-D8js79E_qejf0Z_UAX9FKCiyuYuuzL3wc07LfX_RgoHG7YTf-Z_xymLv0ZkCiKskpIRPcFcvEBmjLOP4Dr3D9lPFLrYXc9JQDudaVy-bPQiN_HRI8FodWVWkNM3MxAtLphGP4OVinRN_RNmc7pv-Awc36eWPfXtjbCEHzkWnbaW3rrP4OFv_dn_glczf0XsP5F4HgoooiqBUmdOobTs3TPxBtkc3oD_1dAcUHnEjvQJbDeQnAh2ELWhyYiBF4BAesSGBnzglGxnPHrV0K6LtHxYTYXX-LM_xEWfMI8hFzTcwjahwIPv4Fb4zEkSUgLHHDjmiUAGIM4Xm7wbaiHKyGeoOy0cbNk8HMMk_HMMYxFKscqtfgswa6fKMVNQsWuZ_9HZjfFsWvZPO7_ABysC2SxLmARz65FCNZgTT1E0DAqI-eQtFgmT7li58B3xXMJjBJP7Q38MaGc8FdmDqiF6FFxl3kE08_OCmFo46SiF00wl39Pu-K_TIQLrAemh4mGQ1wmLGYoWsaXho0KSJiJCN7DbhGcmYjgaq8ArPZE0Lbhtj3tCXYLGEK7NJFYNet0pmNcgEiEssA2EbcC21iQCiw3Y5IlwjYCE6Jn9p3VXNh8Xvu_sM7B6l05s9-uANAQs3okfRvhecPKrrzqARrCGtQJ1tIsqyn28CUUdKi40LEXwCmqvmEX89yRqIP5p3xHwLpokk7cFDuIJcw0IaqGRQQdYkbfBoVDYstlQvRf-mdCzkc2Is7Asscoh5N3bCCagaOM-7rQVRXyDpIQ8J0FfFHdy_M0t-RInyYlD-OErGEcky6MNuUZqDaUUJasglcgEgjwRKmFQVZiMpUllbeEVVqUYf7wrDTlJzHwOZ6GyF6Qp1UTnlidNkvZX5CfJaTtAnIUNCO-bX1NfxOW0g22b_k6OV9w2e6IwJn7KghualeQma5kcfl8_VWgTh0Xj53MKrM22tzjvmPK9H_i2jxjL9SCbVohGNeCBgjoaMBqTrDE9cdJstGBMTvlmTEFgxk75ZmpPTBSe3kmodrBMrzOAnyEBJ_SX_l7ugw-Wp7GG_sd0Lyj3wHHW_kdcNDF74CKOnekM7kkjzG8a4YOX9lHbKIvuyM8hv2NApc6HiDPhFbfJ8dgijzXUqdEkxXX9nBJti1vOJKVATIdGHkTHfbnHQOBKMdrkwki31lWfCgrR_KhrOxUtpr8t1Or7VS2t5sleSor2_XGVqXKPnXv13cacKgel-QfOMH9rUa9yhEPmvXadrPZKMlDmzm-cgYWhO1dyyOurFTrx_8BOZSnhg
-
-Верхнеуровнево
-https://mermaid.live/edit#pako:eNp1VN1u2jAYfRXL14CaQPjJxaZJ3U9vqmrd1YALC9wWiSQohLUdQWqp1m7qpE7TpO2m26rtAbIOVgpteYXPb7TPToLoliABiY_POf6OP7tPG06TU5Nuu6yzQ16s1myCn02PuV4VPoo3cAcjcSbewQSuCVxBAHNxAHfisE6y2Qdkg7ldvmZ73Pb68FVhYxjhdwYTMRTvCdwi5QbGCrhFlfEgtAh_l_hSz4cf6IGUkPsLuTOYiVOfbDYclz9pO7tVuBDHSitATbkqzSTwTS4KLpXPFIIFVQ7WU6zOJShOZV0TcSiGWNWJWuLUJ-t8N9lMR7N0Yj21qpk4EifibZzKUmVrVsd1XqXUlke77zgyRcsbhYwQO0ZskuZ1EU2MnOboE8CtTzbazE42KaBJzAoWDAjSHL5ERSNbnPnkWavrOe5-sraB2vfmp4l-UJ2CbQNXBGcGcCUOMONLCHzylHWS1YumxLLhckNymv5_HTJXKmFzDuWTL0nMSnYqySa7z0hz-oQ-U3EUBoqFq_2SQa06jWTxMoqnsNAkOpLxAVDn7jnvdhy7y6vwUwV7g3PD-oLwlBEcHqpyh4uNjJr6nkCILPVgAhp3TgK0tPcJaLRvSZJx0glYFNM_SIjF7wpc53veo4bXcuw-nGN0fzC4U4In5A7mOaKuoWvVepcyyYeDOIWYFW9XuPPxJibPOpdJ-uSx3azCZwxZNRKe53Ec9wj_AnXh_FaB0wy1uGuxVhNv174UrVFvh1u8Rk18bPIt1mt7NVqzBziV9Txnc99uUNNzezxDXae3vUPNLdbu4luv02QeX20xvKWtxWiH2S8dx4op-ErNPt2jZlbT8rmVvF6saEa5qK9oxUKG7lNTL-YqRb1kVFbKZa1UyZeMQYa-VhJaTteNvKHpWqGAaKlgDP4CQ-sA_g
-
-Сценарий 1
-https://mermaid.live/edit#pako:eNqlVt1uGkcUfpXRSLmzLRbWhnBRyQJaRYpC5XUSKQFFIxgbVNi1lkWJA0iOaeNUiZqoUtWrpPIbENdbGwj4Fc68Uc6ZWQpr48RRuFjYnXO-73znb-nwileVPMt3fbFXY9v5ksvwc-sWg2P1EkKYwEAdwDkMmcVWGfwNA7jAB1P1guHTCZyizUi9gAGDM3wewpjO1CGcGyQnEH7wGP6BKYxVXx0RJJreHKbMVld_YA9Eo14VgXS8tl-RHfgTAcboeYrhvYRz9ZbdySOSdpkiywTPRjDomSDMNY5BsF1ymhA1Oh1o3hECTNRrGHZZwfc9f0u29jy3JR_DMUqYwkf1O9IcqjeMbvCiXiHVR0QImfqVYOATxnQIg7JhjaFoLQW3amFGNN0pCYX_ZpCU7SNy1_hRAUaqX76BjqUacjVZ-WWWNKKcwgmE-D2iVJ8wp3h_K1dwojwtWGtYeI-qKCgY6gpNuuyefGoMvkfBEp4FCnNa8XyZR5VLwj7V-K8Z3g-w4thTlO-5nCdOrrhVcJ5sF7c37_auEs-gDfcxOWspIUva6qjLnPburmwFW7IiGpVrdF7ocMIZfSQv5hnBo9e_6IuRGnl6ImbYZp76ptW_EfkD-mA-4Awxa97TYqOqlZlh0wdRHdCOmqJPrYuDjN1KwzNmNHwXaPtJJxD7B4blr2XrHXWX6msEIwepc23fl27wbfQxqssoelAeinrwo-fnZSDqjVYHPlD6qfp6vMPYGjF9oRtBRzbszYFnmVkCuhhD_MTIne-7VyQXm26B5bzLfpJBZL-440wl482YL2xv3rnrRKrnfjqoTVc09p_Ln4Uvmoj0Ts8c7bczqhB158BUyYxCLHUxX41Gmg26vK4l5irUG7MrYtNUnicvBqThdVvkasLFhlwynRg0xar36sRU_ARbLVrOoV6Pv12dygjQpP0vsqUwL4Gpt11W3NmR_v092oDXzCYuZjSmoMZRDGH5Oqb3JHdJ0F1a0_-XltpAS6RtfymB2te8hf6IFWYh0C-tgpmUG6-CK7gLi2AedMnlK7wp_aaoV_H93iHfEg9qsilLPIs_q3JHtBtBiZfcHpqKduA5-26FZwO_LVe477V3azy7IxotvGtrunxd4P-E5sxkT7iPPG_xlmc7_BnPWnZqLZlI21Yyk8qsp-z0Ct_n2VXLWktZ9noiuZFIZNKZpGX3VvhzjWCtJTfsTNpObNxO306u26lM7zM8fGg9
-
-Full
-https://mermaid.live/edit#pako:eNqdls1O20AQx19ltRK3gBJ7_REfKlWih156oacSDlZiIBKxo9SRoCFSAFFatWqqqlJ7aSnqC5g0ESEp8Aq7b9TZdUkcew2xE8Uf6_n_Zj07M9kOrno1B1t4p2U3d9HL9YqL4LPh2y1_k35hp_SWDlmfvadjeo3oFQ3oHevRW3a0hVZXn6Dnru-4fof-FMMjOoTfFH43YD9CcAroXzoSj2CI9bshPzyGYs45pOecSgfCdkIDRC9BOoUvDB6ijarj2q26V9qkF-ytgAVgyOdUshD9Np8WgsEbMY0JO6LBVtLTD45kH_jrjNkROwbVmZjvZO5HSfpRwE-6VOLnN52yE3bG3t2HY45Xk3gV8DEF60uoFzyeXIfoHUQn4JdzMEmCCYBlIgn7-_936nHfc6iWhGoAXbCW0H6BnyvWg3BFFlBPsnRgfRaZMoX7KwTDM6F0mudCGibWMevN4UYSbgA8kVp3iwCpk68gmbCTMHDwngGAF6JiJp2Z4CxFtxXN-1k2ixJ64ez7T6t-3XNLHVgpXj1DSINPUHMjXkM8l69FrAc8i7qLDCXGUHIw1BhDzcEgMQbJwdBiDC0HQ48x9BwMI8YwcjDMGMPMwAiPkbx4vKGkSB7PYrlHRdqUI5WWIsjrT12quaWo0vuB3BkJZek9J9KuUrRpnVLuUMu-ftpDPVTuRc-2BAlh1jAay4QiYZ43Q8ysGWkuG_TwuLKCYBNzKTY68cJkfT4w5acBbCpG7BTBo2jvH9FBSgXyrYmYLsxgDHH9eIieubXNhfHZdmkIp0Dsef7M_pQSNSYnptTGcsYki7GWxVjPYmxkMTYfNsYF3HBaDbteg81th4sr2N91Gk4FW3BZc7bt9p5fwRW3C6Z22_c2DtwqtvxW2yngltfe2cXWtr33Gu7azZrtO-t1GzbJjXuTpu2-8rzoLbY6eB9bSpGs6WWilYuaYSglrYAPsGVoa4amq6pRIoapEoV0C_iNkBfXdNUkelk3i6aplQgxu_8AafTKNw
-
-Timeline
-https://mermaid.live/edit#pako:eNp1VF1rGkEU_SvDPIs1bjTuvknqQ6DBEG0fykJYdJMs6BrMCk0loEmbBAy1oYX2odS2v8BqpOrq5i_c-Uc9M2vS1SbLfszcuffcc8-92uSlWtnmBvecql1xXNt0GS7P8So2ox751Kc5Ey18_qj3bwrEGU1pzLZf7bDsFqOPNKQRzWHth8Hh-9gueU7NZfSNxjTHM0O0L66x7osuoxv6HDrKi76LNg4CGgCoQyMm0ZDLp7G4EB1msEL-5e5mrhBbLPYKm_ndXGGvmC9mX0RwbiRRiaNQ6A65JOsZjcSZaCmkFAN9X3wQl6ANP_H-Pz8JEAHtSYto40RRu1pQCyRXAK4mvUWxfXU-pHEE5hfAARJ1hLiLgg0pVKCEhd2HQtDXdFe0jGaaMPFOnANgKi6QMZDCkv8YbZxNWHZnSybpYeOLc1W87ApoBIgfKfWnTyg5URMAqEupj4T5Cv9bRE1FW6oXSFVXRcTqSRGXRVLE0J4uzcLTAex3i4DOMzVyA4XaiSB-AcBQFXMF3fpsO1fMSqSfcnjwjBXdttQ0LDMCsqyrHOV_c7xKWkW1VIrHBmVpAsLZHqjSxrLBsjei-2RX1G_jXkgA_YjIrHRVydsrWi4PHAARj-1MtXGRNFT1kyr7wXNpdE2Xx3jVrlctp4x_gKZMYHLv0K7aJjewLNv7VqPimdx0T-FqNbxa4cQtccOrN-wYr9caB4fc2Lcqx9g1jsqWZz93rIO6VX2wHlnu61qteh-CLTea_A031rRUPJ1KaZlEOrme1HDH-Ak3dC2uJ_VUckPfSCf0RHrjNMbfKoC1uAabntbWtUwmk9DXMqd_AS4tiaM
-
-new_TimeLine
-https://mermaid.live/edit#pako:eNqlV29r20YY_yqHXq1gx7ITJbFfFJwmlMCyhLp9UwzhJl8cgy1lsjyamUDsrA1jpe1GYGOwdoV9AMeJsZrMzlc4faM9z51kybL8b9ML6U56_t3v-aumopslpuSUOvuuwQydbVdo2aK1okHgorptWuRFnVlyf0Itu6JXTqhhk_zuYb7MYEHrsCa8w294jw_c9iTpNrXpYf5gF0lxTWA9SfXENI6qwgakC3Yx8raQgv8COvu8Q_gtLAag-mf39STxHgOFQL638zxP3BZ33JbbBkv_4Z0YG2hVb1Qpnho1_AGC7923_M69gOd74Bu654Q7oO0WRNyBOBAixSBKycePfVhyhP8G3A_uOfC0IjyE9-F9j9_jN5DqSBE-L4jxIcuRpzvPSapuNiydpZry-Q2tsTPJ4tMhyxbo_IT6eJf34HkHikD8hfsTbFFNV3xCrBz3PfGQGLqX-AKpPZFbyTED-F9gaV8g8BboO26byGON1DgRW8ZhWIRdCrCYbhOr_O1X6Ww6QTKZVbhp2iMvFqs24b-Pm0zg0cNbh38R6A4kbQRMdE3UHwMRPAEa4Ba0pouo-EjEu_XPMCeon8YZ682D_cLInQFp1IufAZ2-F9aoAsOcPwgFDuFdUth_8ezJTkEKYEYptPgPkZQ6qVJjSjiBIfcQQZeIrTTlAaIW7eqImBapdAPH77hvYD87Ej5J1imM8yyHPAVrbWbVU020eLd0tqjRgJtED1MClh3UCxWg57ZlJM40-7PHPMSAi2WeMD2oXp7x-uhFCups3a6YhkErFkuVQGckrxdNho9-NGPp418IoCtSekpCBDaNn29p--ICfGtWeI0cF_AGq9E54XR4TlXcHgUE4qxXfonHEOxi7b_ClnMHPrjwijR8DJiCQhZy5IcoPQq7DUt2eF_IDgSNsmti87-OMARDsDS3ZWGG1Tt0nIM-JLBriVIpe4QzfqwQ7NjbPOABYLow-nghbwSfqygU2DOXgyJkXEjw39g3IWUcr-6PSuePoi96_oBPN3woo_dacMxK1riyFzgCfZDOquGcASAwl69lD5-YGeaU7FKFVs1yUqBZn1m53dfC4EFQMoei9_awc2Hsdsn2bv7r_aeHB_ln-b3CHPUj73q6pyRjyBAZFePtbiqM4VAI9fw5obDQsbuCaeyUy_Uq9j2tNijWomQ0ihdoVIh4SyK-bMX_VbB2Fq72o6nRjxbde8OSFaPEXkmOgCzCAyNSBzL-EpVMTJcRznmzleionqxgOI1Pyw8y94R_Ra0ZE-UrnzXH6KbFpnhkSia8ERvRSh0cQdsy68VsKrL_Wph0H2v7lKQ8rtQBmtMl7PBH33McPbAYOEIrmhCn1xsgP_p5TLyJHocYkIFZJuAWo0wPW_G8cV9JKDVm1WilBP9eTVRYVOxjVmNFJQfLEjuijapdVIrGGZDShm0WTg1dydlWgyUUy2yUj5XcEa3WYdc4gSbt_7iN3sL_zEvTrPkssFVyTeWVktO0lUxaVbWNzLqW3thcV7WEcqrkVtMr2Yy2mV3LqKvpzKaaWTtLKD8ICemVdTW7pqZX17SMlslm1Y2zfwHaw1jc
-
-https://mermaid.live/view#pako:eNqdV9tu20YQ_ZUFny1LtiLZ5kMAO3aLPKQJ7KQPhYBgQa1tAhSp8lLEEQT4giQoEiBtXloUaNoU_QBZCCHFrtxfWP5RZ5akSC5JiaoESNrVzNm5nJlZDhTN6jJFVRz2vcdMje3r9MSmvY5J4EU117LJM4fZ4bpPbVfX9D41XXJoeS6zn--eMFhQJ1oTsc5L72qubpmJdLguk35gGQbDsxOF-VaZzlc2c05N5jiJzj51abJfpvgtNfQuzRw23yp1x6TG2cu0-_FOmcYhc_qW6bBUwKKdMg20_vnuk4dzT-B3UajMY0NkLoxSvCrA20MJ_jMf8QkfEf4Zfsz4LHgbvMoLP2JwIIg_Oni6S4ILPg0ugkvu83_4qMAGamieIeKFJ_wGwLfBO34TXMH3e9C7C84Jn8JpnwHiBuAAJIRBbtXu30-TSSX8F0D4NzgHvQtJj_AJ7Pv8Fv8D5GkIE36mUQBUYpGMK37wMffh-4ZPSeTjXfAGDpzCVuSpBAPAcWZU8vXBU1J3LM_WWH0Qfn9De2wYasZyqLIHx_-ROXEEcQ2ugh9hieeOxV-YkmnwvtSY_b1axgD-JwRjIgL9DuRHwWXOMcmWwsBURZFjkU9dVaSowRgu4b9mXSXw5ePHiH8RiZ-FsgUZzhaVnOAUwUlwBXaAFcjLSRhpwWfgZwo9Awf4yE4ZdSbqJ8kUsBIdG2PG4iylmS2b-HtaHxwt05eMyUe6MlA2ZulODCifIBiTKFSIUkY8fKVVl9fXTDB8BfhFhfbk8dG80hINucByzkzQIBEQqO8xOXr87PDBwVEIwMzuSs3jE78OG1maV2X-QHuEegeSnWMzhLcvqAdK_AtGJQ9VLQ5lDafeN6i5AgTYB2rgsFMfoOrD7nCRdjJXIn1tvlGHe4ODvDCpbrM6jE1a0AorGcV-oIZHEauW2FeYrOV96IOgwhjjDz1I8PBaJGOeuVzsJQZIF4qC_g0AN8ElNLtw3s3imVSAnWp3f4kBdg1qPihfYLMH21AboJEoEXcLuSEZtWR05nAz3W6laVkAhaN5Im4Ii3KMN4kov5BQWkxeKdvVUvxRMgmLKx037lcpdOn6h2kWCfYRCMo6n-YS-khAhdAfRDeYCujXYQyX4lSaseMs8MJ7UfbyWuRwglbmbPiZRUISzW-CccvWoh1W080uexGV71xM0gHXRlASb7A0cjdGSbPIk3xkRAOIEGOQEuNzaD-JYX8raC4ClIGO0SScCukK3hIRzwg7a9bScR28ivpY3CkKTIOiiIz7XyN7pSMqjG3NgrZVVbqrU8M6qZ3qDkidLQhN7mr1Nw5VeESZRn16fg24E_frFAPKbnofY0ESPXngJRHQMEJCXRSXDzNcJqeypvSY3aN6Fx6mB3hKR3FPWY91FBV-dtkx9Qy3o3TMIYhSz7WOzkxNUV3bY2uKbXknp4p6TA0HVl4f6j9-Eo9F4EnrO8tKLxV1oLxQ1I3Nxnq70Wg17m1vb2xtbm3trClnitreWd9ptJvNZmtnswnv9nBNeSkANtab97bbGyDcaLY2W41Wc_gfv_l1cQ
-
-https://mermaid.live/view#pako:eNqtWFtvE0cU_iurfQ6I9fqS-KFVSQAZsCGOtw_UfbASB5ASG6WJWkgiEdy0tNCmValaIXFT-1ppcWLi2LH9F2b_Uc9ldnZmd2OgKg8bz-7MOec75zuXYdtebq807aK9utb-evlOY2PTqi3UWxb8--yLui3-EL6YBA_FONiz4PGd6ImRGIi-JQ5h-UiMRRdewFf4DS_79GMcfA8v-7DPr9tfWufOfWJd3AZhv-PX4Kklnot_UvZ-Wrd3WfVFPLMjngl_x5rHky_AjBNxRNp9OCpGwbdw9KE4FT4Y1Q8O6vWW6FriV_HMEhMxJh0JgS9EL3i0Yy3EkMF5ZVbQofNiGDwVxwTPByt7sD4ALCxtgSHxgp_zmsWXQLw3f84pWlJJB1QMDPehtR_sQEODhHA5EZy3sGCDx-IkxUWsdCzeJpX0lBJ-XiZ8V1DFa7D4kA-AKOlrCy0mRYfo6aTNFAvy6x4571RTcYWEX9L1XaJXVzHQr8QQcIwsgOKLw-Bh0IFfxDdfDMCGDvwdohej2F7VXF-Srj-Pzv8TjnZxN1jWI9t6aNQEzQrNHACqPtqIf2FXFz13TDxSFl81PH8N3fIS3M0-GCrRIJhsR4LGrFeirhHSkg6-xK8cRE_sPWI2wNkJCouAlhwdaQYPPDfM72NgVKIET5JHJYaSiyD-AvN7qA7io8GAiBKpAOJQxg4cpVsFAAemi0ouobgVsrKLFgWPNbcj_R_D77fgDyBojHGljAbtOkp5AzuBvegO9CmgCfZxMUT6JaIWGZIxgWanAcVcgBwEXB16PoJ9Mk9SeKGnr1KXZdw6luv0qsxMdIGHCkrSbNBEdMMa0AP_gGUAU88cpYrFVlhsThereUgJHKvaNgrTdCiF-jHfl9leIuAb2Iye6qM9KnYkNZbk4EtDc8S1sk7TMtH0WbgP3X4GRcsmRcv_B0VjRgcdBb3MhC3nUMsrkIVahiDxXaTFxyYgwzWiNtDHQCk_JzzSNWMRc7NO8XKWOT4O9rGsat6OR5MZT7V3D-uYEcCyyfZyfjrbqQEk-Z5udTkvPSSXOVpelyvm_Q0dYIUJSjx6GdEPgn6iyIcWYIGED0AC9G1EgIrOm0rmfWKwxFKjZucl5UinVFwiNhx7AnsHyAy0YL7dWl3baraWmyhsIhnAfdhXdV2rvlK4HsUKRTGtzfz3nKyYIa3kEo1eNRgNPSrl9v4hKnIyUgYwVweWT_hsgLWGvARtGG0gWFO6VSgwBFJIAImLxLZQb4G0UG1UZysFNtk1TM7rJs9-TCy06CsVedPeuY-tPwhJ9wZVyEGqqjlGUzDQyJTiqUtlO01yVC0HmDRnDI6R6NlkYt6gVzd5vEqbbJ9iPiJdhqgXYUo4UcuD2MRT4abm_cWzyhmF9xj8waXUZ8OVuTcNn1e5uWWhub2k5rYnhyxfY3hKF-bnIsFcmgpzn-p1jysIj_kdeMHzP1ORYt0jn8u5OQK-pEH22NgMGPs6_RxdJEJFXaCfnIeCn-NBDYEsGe74nCfNd7D5KHQBsxmxoY9PcKRiVh9r1xnqRO-7xPCzSk6rOuw1n6J3iupxsNA6tbxe8SWjFzFjLAaRe6p6Ba9m0Py_5RWkT-nSjWBA7gQ_BgcUYvbKgSSdMSUFB3jYSr0a4RcFp2pW_ep7xgdUiheYY_iCTT_KpNRuIC-ICaO1e02VJ4pq9uyJIn75MGonD7gTMwZGslS5QlSN-FG7sGrTWJ-GRwylAaqL9MP94Zx2FA1t8dSvaXGuOQj4FyLLkBvdSPJ9P32yqDlsc3I0RFuOaCzB4L9LDok1vf3WKMavaG8vqpexa3bco1G21cxWW82kQJTfPP2TR-Z7lDO_hbWYAJxVQVKCHWHy9KzxpmcNyh5RhuAgqLW0Ed_QQfqAVJ7w_4JQ4YUKF5Uehd4zE8ajMckII7IDZmYGQ8VbgdFTxxi-pGx9mPCycYIQ00By8ENYvTDwA6otkrZY3Cw5X6QaoWCYY4Y3baAn7-H0q7pRCAjqTvATFeMJ3VwxpKexUulx-nmSJh5PUYtyldFXkkJcERbtGXu9ubHeuLtiF-1t_Fa3N-8012EgKMLPleZqY2tts27XW7uwtbG12V6631q2i5sbW80Ze6O9dfuOXVxtrH0Fq617K43N5sLdxu2Nxnq45V6jdavd1pd2cdv-xi46c-5554Lr5mdzzmwuM-fmZuz7drGQhbeZvFvIZZ3ZjFNwdmfsByTAPZ91LziZTPbCXA7eO7nC7r-Flu13
-
-презентация
-https://mermaid.live/edit#pako:eNqdVdtu2kAQ_ZXVVhEvBIEDDvi17Vvfqvah4sUlm9QSlwhM1RZFCknv6S1SH_rQ6x-QgBsCwfzC7h_1zKxNUpqoVYkir2dnzs6cOTvuyVprQ0lPrqz0gmYQeqInMvXW1i31UNUznshsqPvdrUxWZMIHqqGsZdPv1sOMSI13_Xbg36-rToaja7drfl055Hqtkr95s5LPiB36W1mpNsOgoepBU1WbAr8wCOtK6G96qgd6JsyujrCY6rE-0QPzHM-xuNNRouZ3VKfatEEdVQuDVlMUhJ7oY_jtmj2KEk7eKVkX-ulvgIvhEOE50QOhjxh7SkbhiTvXV4HwFadEemYdhjoGFMXMsOpjPRZ6zIvYvIBxbP0msOoZrJEeAjzN1KNKYj01b5B-zKmRC94F1aPn7PsSvthCWnuC9ydm37yC8ZRR9YhN_X_NJiv0J_1pFYBDKgSgzN4x6oxon8-hyDmzO0qgBuRh3tss3po9s29reor9XX1mazLvcsukO38h_QslbA64mN9TTSjPFURVIuUkRexGvB8J09dzCko4Rhpj4oee8DnmuoQ-1B-r0mLlCek7cukTiq18wd8V_Uxj1yj2BySBcq8-jAIjdAwJmmeUoK0p0mcpTgk4sCc4I5IxWDyAt0WImXccTilQQoLkbVtQlReI-87tikF9xEWciwqnOFZZIBbJpHwtVfsf6nvJqhlT3tCCMPt47JsX6RkwoSMxq-gkhcP_6SUyzJ2XsiyZtdXi1aLRH5DWECefWfUmwsPJ8eJmJiQU_9mZr_6S1s9LGlHxlAaYWjQl1kfmtXnPfbpY_EXoSDAVPwnYRs2pJpjOCJJWWdLMBNDvQM2AMJaZGi-rRNhoQI7IAReRG5Vo-jdmIVgrjwEdzTPTNp66RBcqXtxp0hLo3mV5QPfJLEQToQeuaMrjZAFkDi4dan_MU9qLkF3_ssnIfXKF_gzHGd-omG_UTA_tWLLpWwWfUubLs2ue3EFmgynoW9Lm59M8LfGQdEmD64R4SDDJlwYQUTIFZuJrcaMrRgU4llnZUO2GH2zgY9ijsquSv25V6WGZfPToyu7A1e-GrduPmzXphe2uysp2q7v1QHqbfr2Dt-72hh-qG4G_1fYbC-u237zXajXSELxKrycfSW-1nHPcUsmpuGXXXXecopOVj6W35uTWXadcKJScQrG47pZ2svIJA-RzlVLFzeeLxbKbL69VysWdXz_0gTU
-
-логика
-https://mermaid.live/edit#pako:eNqtV21PG0cQ_iun-wwIn882-EOrBoKDHbDjtF8S94MFJkQCO6K22hSQADclbWhpVapWkfKm9mulw7HxG7b_wt4_6szsem_37uyQqpFyePd2Z-aZeebl9s2NymbJTJpbO5WvN7aLe1Xj8-VC2YB_nz0smOwP5rCRe8SG7rEBj-9Ziw1Yj3UM9h6WJ2zIGrABb-E3bHbox9A9hc0OnHMK5pfG7Ownxq19EPY7vnXPDPaS_RNy9tOCechV38I7B-yCOQfGEt58BWZ0WZO0O3CVDdzv4OoRu2YOGNVxzwuFMmsY7Fd2YbARG5KOgMBXrOWeHBjLPmRwX5rl1uk-67tnrE3wHLCyBetzwMKlLXNIfMGfS4rFt0H8F0uzkaQhlNRBRU9zH1p7YwdqGgSEFc2fI9YHRQMDLHbYe_fIrcMvUOM5gD9XFCtTwso5tPNPON8AIS1Q3CLVLQOMHqE9ZAXY2wNnddAX-BdONTAObXK5NHJFM_LOBD9PMhe03MT9d8j9KyqwFG2lIugVokCTuxQkj5AyniNSEdUHFl54qQGDIAw8trkvglcFulQU4f0FJrZQHVCxL32HBCTQ7JJ2r1kLXahaBTTu6c5LRQnFg7HXGmiR-1wJCHLoOfy-BG8NWVfeFPctBdoqSnkHJyFL0B3gb0TjPsMFeNMIxtMzxNKB2tOAsku06gRw1el5Auc6nOEhjFFzQKqzOW4VyyptpTlHo8BQCSVoNmgiImIitcA_YBnAJLodE3mupSouNsPFxlSxioekwKEkLmQo5qsByLlQx-f7NLeXCPgODqOnOmiPjB1J9WU3-FLT7HEtrdI0TTS9GJ9Dt0-gaFqnaPr_oKjPaLcuoac5YdMx1PIGZKGWPki88rQ4mMoiXANK5g4GSvo54JGGHgufm1WKp23O8aH7DIQ7irf90eSMx0Og7hR9owQwrbM9HZ_OdpQXwvdwq9Nx4SGxjNFyVaw47--qADOcoMSj1x79IOhdST60ANsgvAASoG89AmRU3mSsD4nBAkzlljsvKEc4JRMlYsO1F3C2h8xAC5Yq5a2dWqm8UUJhI8EA3swc3lD06iuEq1HMUBTDGtB_z8mMHtJMLDDK0BjhQ49KKbo3UhETkdKARVVg8YDPelhryEs9EDbgfbUzpVuNBY6BJAJA_CKxLUAbPZZqvTqbSXCTo5rJcdXkhY-JhRJ9qSKu27v4sfUHIaneoArZC1W1yNEkNDQipVDtWy_baWKkatnDpJkwfXmiF4KJeTu4dZe21jDKb0JHljNMUWRQH01B5AKh1wUhXP7sWFMCsj6pwlHE2-AiXl0djkUiWNPCkOX9zoZ-95r6HWd2gySOSR_SmPkzSzCzEY7TIUOuUTC2TaUPiQn8EnbaFF8hcch6HsSsWp-yFsL7WwzyHSKDNIqKrfuje07WEm6a8on06gzgnuNlI3R6xjcSTlavadkPNEdU2oD9NrzBlubxJLTWidk2YDS4VxrA-2XWntwv_UO3Vhn4-DbSY6DFPcv5n9XiR8XQyE3jaRge1hcGyBrZGZ8fTyFNbyTxszinxDkXQcC_EFn6vIwT_8bjaLBv5iLc5uDgg7Y0qeli8K-CI1BObS73yNN0tOUVA9-HmN-hXpHP6X0ka4UgFO_yPMcsyLG3WGeIUC2qOvSFivQE27k-jl1M9u7P_vKk51-eXJGn_PttXLXIGbzsBzWFEMfzT17NwPz0DETZA8o2HJmU4j8g2fjh1iOVXf7RTfWo7p560CSWvJ58eRooNEog02C65GCopkkwahpqY4qQrbbdvO0nG7EWJLs_4IfBOAI9qlMiBeB_1xCdONQICUNvyPlpoy95D-dEWaTHgKCGuT9RsEf0jYchvfaHnadyXnAuz-eNdbGy1BV_3gturdPW_Yc0BV6B8qYX2yYfzalMdfGrkrumrXyu0zA--WvcnDF3S3u7xcebZtLcR40Fs7pd2oUenYSfm6WtYm2nWjAL5UM4WqxVK_efljfMZHWvVpox9yq1R9tmcqu48xWsak82i9XS8uPio73irtx9Uiw_qFR2x1dgaSb3zW_M5KwdmVtIRONWwl6M2jFrfmHGfArbkchcJD4ftRPWYjyemF9I2Icz5rckwpqL2pYdicftiA3XEvDqX4ohPlo
-https://mermaid.live/edit#pako:eNqtWFtvE0cU_iurfU4ieb2-PlCVBJABG-J4-0DdBytxCFJiozRRS0OkBDctLbRpVapWSBBQ-1pp48TEsWP7L8z-o57L7O7M7sZAVR42nt2Zc853zncuw4653F5pmkVzdb391fJaY3PLqC3UWwb8-_Tzuin-EK6YeHti7O0b8PhO9MRIDETfECewfCLGogsv4Cv8hpd9-jH2voeXfdjn1s0vjNnZK8bVHRD2O371nhvipfgnYe8ndXOXVV_FM4_FC-E-Nubx5Csw41ycknYXjoqR9y0c3RMXwgWj-t5hvd4SXUP8Kl4YYiLGpCMm8JXoeU8eGwsRZHA-MMvr0Hkx9J6LM4LngpU9WB8CFpa2wJB4wc95xeJrIN6Zn00VDamkAyoGmvvQ2g92oKZBQrgeC84xLNjgsThPcBErHYvjuJJeoISf1wnfDVTxBiw-4QMgSvraQItJ0Ql6Om4zxYL8uk_Ou1BU3CDh11R91-jVTQz0kRgCjpEBUFxx4u15HfhFfHPFAGzowN8hejGM7U3F9SXp-jl0_p9wtIu7wbIe2dZDoyZolm_mAFD10Ub8C7u66Lkz4lFg8U3N87fQLa_B3eyDYSAaBJPtSNCI9YGoW4S0pIIv8asUoif2njIb4OwEhYVASykVqYUHXmrm9zEwQaJ4z-JHJYZSGkH8Beb3UB3ER4EBESVSAcShjB04SrUKAA50F5XShOKez8ouWuQ9VdyO9H8Kv4_BH0DQCONKlgLtNkp5CzuBvegO9Cmg8Q5wMUT6xaIWGmLpQO1pQDEXIAcBV4eeT2CfzJMEXqjpG6izGbeK5Ta9KjMT08DDAErcbNBEdMMa0AP_gGUAU82cQBWLrbDYjCpW8VAgcBzUtpGfpkMp1I34vsz2EgHfwmb0VB_tCWJHUiNJDr7UNIdcK6s0LRNNX_j70O2XULSsU7T8f1A0YrTXCaCXmbDlDGo5AlmoZQgS34VaXGwCMlwjagN9DFTg55hHunosIm5WKV62meNj7wDLquLtaDSZ8VR797GOaQEs62wvZ6eznRpAnO_JVpez0kNymaHlbbli3t9RAVaYoMSj1yH9IOjnAfnQAiyQ8AFIgL4NCVBReVOx3icGSyw1anZeXI50SiVNxIZjz2DvAJmBFsy3W6vr283WchOFTSQDuA-7QV1Xqq8UrkaxQlFMajP_PScrekgrmVijDxqMgh6Vcnv_EBUZGSkNWFoFlo35bIC1hrwEbRhtIFhTupUv0AeSiwGJisS2UG-BNF9tWGcrOTY5rZmcVU3Of0wslOgHKrK6vYWPrT8ISfUGVchBoqoCo8lpaGRK8dQVZDtNclQtB5g0lwyOoeh8PDHv0Ku7PF4lTbbPMR-RLkPUizAlnLDlQWyiqXBX8f7iZeWMwnsG_uBS6rLhgbl3NZ9XubnZ0NxeU3Pbl0OWqzA8oQvzc5FgLk2FeUD1uscVhMf8Drzg-Z-pSLHukc_l3BwCX1IgO2ysBca-ST5HFwlfURfoJ-ch7-doUH0gS5o7PuNJ8x1sPvVdwGxGbOjjcxypmNVnynWGOtH7LjH8rJLTqin2mkvRu0D1OFgonVper_iS0QuZMRaD0D1VtYJXLTT_b3kF6VO6dEMYkDvej94hhZi9cihJp01J3iEeNhKvRvglgFPVq371PeMDKsULzBl8waYfZlJiN5AXxJjRyr2myhNF1b58oohePrTayQPuRI-BlixVrhBVLX7ULozaNNYn4RFDaUDQRfr-fn9OOw2Htmjq15Q411II-Bciy5Ab3Ujy_SB5sqil2Ob4aIi2nNJYgsF_Fx8Sa2r7rVGMj2hvL6yXkWt21KNhttX0Vlu1EiDKb476ySHzHcqZ3_xaTAAuqyAJwQ4xOWrWONOzBmWPKENwEFRa2ohv6CB9QCrP-X9BqPBChQtLT4De0RPGoTFJCyOyA2ZmBkPFOwCjpo42fEnZ6jDh2FGCENNAsveDX70w8AOqLZK2WNwMOV8kGhHA0McMZ9pAT97D6TfoRj4gqDveT1SMJ3RzxZBeREqlw-nnSJo4PEUtypWlriSFuCIsmjPmRnNzo_FgxSyaO_itbm6tNTdgICjCz5XmamN7fatu1lu7sLWxvdVeetRaNotbm9vNGXOzvX1_zSyuNta_hNX2w5XGVnPhQeP-ZmPD3_Kw0brXbqtLs7hjfm0WZ-2UPZcr5O101i5krIJtzZiP4HUqZ9lzqXzOzuesvF3I2fbujPkNibDnCoV8KlfI5iwrmy9kcrv_AnZU7fI
-##### Логика поведения агента: #####
-
-1) Анализ входящего запроса:
-- Определение контекста из DIALOG_HISTORY
-- Проверка текущего состояния источника
-- Выбор подходящего сценария
-
-2) Проверка параметров:
-
-Автоматическая проверка через META:
-- Запрос данных по API
-- Валидация полученных значений
-- Сравнение с требованиями плана
-- Запись результатов в SOURCE_SCORES_DETAILS
-
-Проверка через диалог:
-- Выбор шаблона из DIALOG_PARAMS
-- Задание вопросов пользователю
-- Валидация ответов
-- Запись в DIALOG_HISTORY
-- Расчет баллов
-
-3) Расчет индекса:
-- Сбор всех оценок из SOURCE_SCORES_DETAILS
-- Применение весов параметров
-- Проверка критических параметров
-- Расчет общего балла
-- Запись в SOURCE_SCORES_TOTAL
-
-
-4) Формирование рекомендаций:
-- Анализ отстающих параметров
-- Выбор шаблонов из PARAMETER_TEMPLATES
-- Приоритизация рекомендаций
-- Формирование плана действий
-
-5) Мониторинг прогресса:
-- Отслеживание изменений в META
-- Проверка выполнения рекомендаций
-- Анализ динамики показателей
-- Выявление застоя
-
-6) Сценарии взаимодействия:
-"Новый источник":
-- Создание записи в SOURCES
-- Базовая проверка всех параметров
-- Формирование начального индекса
-
-"Запрос индекса":
-- Проверка актуальности данных
-- Расчет текущего индекса
-- Сравнение с историей
-- Формирование отчета
-
-"Что улучшить":
-- Анализ текущих оценок
-- Выявление слабых мест
-- Формирование рекомендаций
-- Приоритизация действий
-
-"Проверка параметра":
-- Выбор метода проверки (META/диалог)
-- Получение данных
-- Расчет оценки
-- Обновление индекса
-
-7) Правила принятия решений:
-- Если параметр < threshold -> запуск "Что улучшить"
-- Если нет прогресса > 7 дней -> эскалация
-- Если критический параметр = 0 -> блокировка
-- Если все параметры > threshold -> предложение плана A+
-
-8) Обработка ошибок:
-- Недоступность META -> использование последних данных
-- Неверный формат ответа -> запрос уточнения
-- Противоречивые данные -> запрос подтверждения
-- Технические проблемы -> информирование о статусе
-
-9) Контекстная память:
-- Хранение истории диалогов
-- Отслеживание выполненных проверок
-- Запоминание проблемных мест
-- Учет предыдущих рекомендаций
-
-10) Приоритизация действий:
-- Критические параметры -> немедленная реакция
-- Важные параметры -> плановая проверка
-- Стандартные параметры -> регулярный мониторинг
-
-##### Список таблиц #####
-Всего 9 основных таблиц:
-
-SOURCES: 
-- Основная информация об источниках
-- "Кто это"
-- "Какой план выбран"
-
-SOURCE_SCORES_TOTAL:
-- Итоговые оценки источников
-- "Какой общий балл"
-- "История изменений"
-
-SOURCE_SCORES_DETAILS:
-- Детальные оценки по параметрам
-- "Из чего сложился балл"
-- "История по каждому параметру"
-
-EVALUATION_PARAMETERS:
-- Справочник параметров оценки
-- "Что оцениваем"
-- "Как считаем баллы"
-
-PLAN_PARAMETERS:
-- Требования планов
-- "Что нужно для плана А"
-- "Какие пороги прохождения"
-
-DIALOG_PARAMS: 
-- Шаблоны для ведения диалога
-- "Как спрашивать"
-- "Как реагировать на ответы"
-
-META_PARAMS:
-- Инструкции для работы с МЕТА
-- "Где искать данные"
-- "Как их валидировать"
-
-PARAMETER_TEMPLATES:
-- Шаблоны рекомендаций
-- "Что советовать при проблемах"
-- "Как формировать отчеты"
-
-DIALOG_HISTORY:
-- История диалогов
-- "О чем говорили"
-- "Какие ответы получили"
-
-###### таблицы со схемами #####
-
-Основные таблицы:
-
-SOURCES:
-id | name | created_at | updated_at | plan_id
-- Хранит базовую информацию об источниках
-- Связывает с планом
-- Отслеживает даты создания/обновления
-
-SOURCE_SCORES_TOTAL:
-source_id | date | total_score | status
-- Хранит итоговые баллы
-- История изменений общего индекса
-- Статус оценки
-
-SOURCE_SCORES_DETAILS:
-source_id | parameter_id | date | score | details
-- Детальные оценки по каждому параметру
-- История изменений параметров
-- Комментарии к оценкам
-EVALUATION_PARAMETERS:
-id | name | description | max_score | source | rules
-- 17 параметров которые мы добавили
-- Правила проверки для каждого
-- Источник данных для проверки
-
-Справочники:
-PLAN_PARAMETERS:
-plan_id | parameter_id | required | threshold
-- Требования планов A/A+
-- Пороговые значения
-- Обязательность параметров
-
-PARAMETER_TEMPLATES:
-parameter_id | template_type | content
-- Шаблоны проверок
-- Шаблоны рекомендаций
-- Документация по параметрам
-
-Диалоги:
-DIALOG_PARAMS:
-id | template_type | content
-- Шаблоны сообщений
-- Варианты ответов
-- Сценарии диалогов
-
-DIALOG_HISTORY:
-source_id | parameter_id | date | message | status
-- История общения
-- Статусы рекомендаций
-- Контекст диалогов
-
-
-##### Разбираем связи между таблицами: #####
-1. SOURCES <-> SOURCE_SCORES_TOTAL
-- Связь по source_id
-- Один источник -> много оценок
-- История изменений общего балла
-
-2. SOURCES <-> SOURCE_SCORES_DETAILS
-- Связь по source_id
-- Один источник -> много параметров
-- Детальные оценки каждого параметра
-
-3. SOURCE_SCORES_DETAILS <-> EVALUATION_PARAMETERS
-- Связь по parameter_id
-- Правила оценки для каждого параметра
-- Расчет баллов по правилам
-
-4. SOURCES <-> PLAN_PARAMETERS
-- Связь через plan_id
-- Требования выбранного плана
-- Проверка соответствия
-
-5. DIALOG_HISTORY <-> DIALOG_PARAMS
-- Связь по parameter_id
-- Шаблон диалога -> реальный диалог
-- История взаимодействия
-
-##### Разберем как агент формирует рекомендации: #####
-1)Бинарные параметры (да/нет):
-Параметр: Версионирование
-Значение: true/false
-Оценка: 
-- true = 10 баллов
-- false = 0 баллов
-
-2) Параметры с градацией:
-Параметр: Мнемоника
-Значения:
-- Соответствует стандарту = 10 баллов
-- Требует доработки = 5 баллов
-- Отсутствует = 0 баллов
-
-3)Числовые параметры:
-Параметр: Количество выделенных специалистов
-Значения:
-- 3 и более = 10 баллов
-- 2 специалиста = 7 баллов
-- 1 специалист = 3 балла
-- 0 специалистов = 0 баллов
-
-Статусные параметры:
-Параметр: Статус архитектуры в Мета
-Значения:
-- APPROVED = 10 баллов
-- IN_REVIEW = 5 баллов
-- DRAFT = 3 балла
-- NOT_STARTED = 0 баллов
-
-Итоговый расчет:
-
-Каждый параметр имеет вес (важность)
-Умножаем балл на вес
-Суммируем все взвешенные баллы
-Делим на максимально возможную сумму
-Получаем процент готовности
-
-1. Объект репликации (вес 5):
-КЭ валиден = 10 баллов × 5 = 50
-
-2. Статус АС/ФП/Модуля (вес 4):
-ПЭ = 10 баллов × 4 = 40
-
-3. Архитектура (вес 5):
-Утверждена = 10 баллов × 5 = 50
-
-4. Код Инфопотока (вес 3):
-Валиден = 10 баллов × 3 = 30
-
-5. Ссылки на ИВ (вес 4):
-Есть = 8 баллов × 4 = 32
-
-6. Класс конфиденциальности (вес 5):
-Соответствует = 10 баллов × 5 = 50
-
-7. Требования к загрузке (вес 3):
-Есть = 10 баллов × 3 = 30
-
-8. Прикладной журнал (вес 4):
-Частично = 7 баллов × 4 = 28
-
-9. Версионирование (вес 3):
-Настроено = 10 баллов × 3 = 30
-
-10. Мнемоника (вес 5):
-Соответствует = 10 баллов × 5 = 50
-
-11. Документация (вес 3):
-Частично = 6 баллов × 3 = 18
-
-12. Тестовые среды (вес 4):
-Готовы = 10 баллов × 4 = 40
-
-13. Мониторинг (вес 4):
-Настроен = 10 баллов × 4 = 40
-
-14. Резервное копирование (вес 5):
-Настроено = 10 баллов × 5 = 50
-
-15. Партиционирование (вес 3):
-Есть = 10 баллов × 3 = 30
-
-16. Прямые изменения БД (вес 4):
-Нет = 10 баллов × 4 = 40
-
-17. Регламентные процедуры (вес 3):
-Частично = 8 баллов × 3 = 24
-
-Максимально возможная сумма:
-(5+4+5+3+4+5+3+4+3+5+3+4+4+5+3+4+3) × 10 = 670
-
-Фактическая сумма:
-50+40+50+30+32+50+30+28+30+50+18+40+40+50+30+40+24 = 632
-
-Итоговый индекс:
-(632 / 670) × 100% = 94.3%
-
-
-
-
-Такой подход позволяет:
-
-Гибко оценивать разные типы параметров
-Учитывать важность каждого параметра
-Давать четкую обратную связь источнику
-Формировать понятные рекомендации по улучшению
-
-
-
-Бинарные (да/нет = 10/0):
-Наличие прямых изменений в БД (№10)
-Источник использует партиционирование (№15)
-Источник использует шардирование (№16)
-Все типы версионируемые (№17)
-
-Статусные (APPROVED/IN_REVIEW/DRAFT/NOT_STARTED):
-Статус АС/ФП/Модуля (№2)
-Архитектура (№3)
-
-Градация (10/5/0):
-Объект репликации (№1)
-Ссылки на ИВ (№5)
-TSCPR_1-CB-47-05 (№8)
-Требование TSCPR_1-CB-38-05 (№9)
-Требование TSCPR_1-CB-46-05 (№11)
-Мнемонический код (№13)
-
-Числовые/Форматные:
-Код Инфопотока (№4)
-Класс конфиденциальности (№6)
-Требования к загрузке (№7)
-Оформление комплексной заявки (№12)
-Название и версия СУБД (№14)
-
-PLAN_PARAMETERS:
-plan_id | parameter_id | required | threshold
-'A' | 1  | true | {"min_score": 8}  -- Объект репликации
-'A' | 2  | true | {"min_score": 8}  -- Статус АС/ФП/Модуля
-'A' | 3  | true | {"min_score": 8}  -- Архитектура
-'A' | 4  | true | {"min_score": 8}  -- Код Инфопотока
-'A' | 5  | true | {"min_score": 7}  -- Ссылки на ИВ
-'A' | 6  | true | {"min_score": 10} -- Класс конфиденциальности
-'A' | 7  | true | {"min_score": 7}  -- Требования к загрузке
-'A' | 8  | true | {"min_score": 10} -- TSCPR_1-CB-47-05
-'A' | 9  | true | {"min_score": 7}  -- TSCPR_1-CB-38-05
-'A' | 10 | true | {"min_score": 10} -- Прямые изменения БД
-'A' | 11 | true | {"min_score": 7}  -- TSCPR_1-CB-46-05
-'A' | 12 | true | {"min_score": 7}  -- Комплексная заявка
-'A' | 13 | true | {"min_score": 7}  -- Мнемонический код
-'A' | 14 | true | {"min_score": 7}  -- Версия СУБД
-'A' | 15 | true | {"min_score": 10} -- Партиционирование
-'A' | 16 | true | {"min_score": 10} -- Шардирование
-'A' | 17 | true | {"min_score": 10} -- Версионируемые типы
-
-Критические параметры (min_score 10):
-Вес в общем расчете: 40%
-- Если хотя бы один не достигает 10 → блокирующее условие
-- Требуется 100% соответствие
-
-Важные параметры (min_score 8):
-Вес в общем расчете: 35%
-- Допускается небольшое отклонение
-- Влияют на возможность перехода на план A+
-
-Стандартные параметры (min_score 7):
-Вес в общем расчете: 25%
-- Наиболее гибкие в оценке
-- Формируют базовый уровень готовности
-
-Формула расчета:
-Индекс = (Сумма баллов критических * 0.4) + 
-         (Сумма баллов важных * 0.35) + 
-         (Сумма баллов стандартных * 0.25)
-
-Блокирующий случай:
-
-Агент определяет:
-- Какой критический параметр не прошел
-- Выдает конкретные шаги по исправлению
-- Предлагает сценарий "Проверка параметра"
-Критические:
-- Один параметр = 9 (недостаточно)
-- Остальные = 10
-- Блокировка независимо от других параметров
-Результат: Не соответствует плану А
-
-На грани допустимого:
-Агент анализирует:
-- Находит важные параметры ниже 8
-- Приоритизирует их по весу
-- Предлагает сценарий "Что улучшить"
-
-Критические:
-- Все = 10
-- 60 * 0.4 = 24
-
-Важные:
-- Два параметра = 7 (ниже порога)
-- Два параметра = 9
-- 32 * 0.35 = 11.2
-
-Стандартные:
-- Все = 7
-- 49 * 0.25 = 12.25
-
-Итоговый индекс: 47.45
-Результат: Требуется улучшение важных параметров
-
-Несбалансированный:
-Агент выявляет:
-- Группу отстающих параметров
-- Считает потенциальный прирост
-- Рекомендует начать с быстрых улучшений
-
-Критические: все 10
-Важные: все 10
-Стандартные: все 6
-Результат: Не проходит из-за стандартных
-
-##### Взаимодействие с БД #####
-
-"Запрос индекса"
-- Получить source_id из контекста
-- Проверить SOURCES существование источника
-- Проверить SOURCE_SCORES_TOTAL актуальность оценки
-- Если оценка устарела → запустить пересчет
-- Получить детализацию из SOURCE_SCORES_DETAILS:
-  - Текущее значение каждого параметра
-  - Полученные баллы
-  - Вес в общем расчете
-- Сформировать ответ с баллами и рекомендациями
-- Если баллы низкие → предложить "Что улучшить"
-
-##### Пример использования связей: #####
-
-Источник выбирает план А
-Агент смотрит в PLAN_PARAMETERS какие параметры нужны для плана А
-Для каждого параметра из EVALUATION_PARAMETERS:
-Если источник DIALOG → запрашивает у пользователя и сохраняет в DIALOG_PARAMS
-Если источник META → получает из Меты и сохраняет в META_PARAMS
-Рассчитывает баллы и сохраняет в SOURCE_SCORES
-Всю коммуникацию записывает в DIALOG_HISTORY
-
-##### Пример взаимодействия #####
-1. Входной запрос:
-Пользователь: "Что мне нужно сделать для повышения баллов?"
-
-2. Проверка источника:
-Агент: "Проверяю данные по вашему источнику SOURCE_001..."
-
-3. Анализ текущего состояния:
-Агент: "Ваш текущий балл 65 из 100. Давайте посмотрим детали:
-- Мнемоника: 10/10 ✓
-- Версионирование: 5/10 ⚠
-- Архитектура: 0/10 ✗
-- Документация: 10/10 ✓
-- Тестовые данные: 5/10 ⚠"
-
-4. Приоритизация по весам:
-Агент: "На основе весов параметров, вот приоритетные направления:
-1. Архитектура (вес 5) - потенциал +10 баллов
-2. Версионирование (вес 4) - потенциал +5 баллов
-3. Тестовые данные (вес 3) - потенциал +5 баллов"
-
-5. Рекомендации:
-Агент: "Рекомендую начать с архитектуры, так как:
-- Наибольший потенциал роста
-- Высокий вес параметра
-- Блокирует другие улучшения"
-
-6. Конкретные шаги:
-Агент: "Для улучшения архитектуры нужно:
-1. Создать документ в Мета
-2. Описать текущую архитектуру
-3. Отправить на согласование
-Хотите, я покажу шаблон документа?"
-
-7. Отслеживание прогресса:
-Агент: "После выполнения каждого шага, возвращайтесь - я помогу проверить результат и подскажу следующие действия"
-
-Конечно, на основе предоставленных use cases и нашего предыдущего обсуждения, я могу предложить первоначальный набор функциональных и нефункциональных требований для нашего ИИ-агента. Вот они:
-
-Функциональные требования:
-
-1. Обработка пользовательских запросов:
-1.1. Система должна распознавать и обрабатывать запросы на расчет индекса готовности сервиса к интеграции.
-1.2. Система должна распознавать и обрабатывать запросы на получение рекомендаций по повышению индекса готовности.
-2. Извлечение данных:
-2.1. Система должна извлекать наименование сервиса из пользовательского запроса.
-2.2. Система должна получать список критериев оценки из базы данных для указанного сервиса.
-2.3. Система должна получать ссылки на источники данных для каждого критерия.
-3. Сбор данных:
-3.1. Система должна собирать данные из внешних источников (МЕТА, Confluence, Jira, Service Manager) по полученным ссылкам.
-3.2. Система должна обрабатывать и структурировать полученные данные для дальнейшего анализа.
-4. Расчет индекса:
-4.1. Система должна применять соответствующую формулу расчета индекса на основе собранных данных.
-4.2. Система должна поддерживать различные формулы расчета для разных уровней индекса (План А и План А+).
-5. Генерация рекомендаций:
-5.1. Система должна анализировать текущие показатели сервиса для генерации рекомендаций по повышению индекса.
-5.2. Система должна формировать конкретные инструкции по улучшению показателей сервиса.
-6. Предоставление результатов:
-6.1. Система должна формировать ответ с рассчитанным индексом готовности сервиса.
-6.2. Система должна предоставлять сгенерированные рекомендации пользователю.
-7. Интеграция с системами идентификации и логирования:
-7.1. Система должна интегрироваться с СУДИР для аутентификации пользователей.
-7.2. Система должна логировать все действия пользователей и результаты работы ИИ-агента.
-
-
-Нефункциональные требования:
-
-1. Производительность:
-1.1. Система должна обрабатывать запросы пользователя и предоставлять ответ в течение не более 5 секунд для 95% запросов.
-1.2. Система должна поддерживать одновременную работу не менее 100 пользователей.
-2. Надежность:
-2.1. Система должна быть доступна 99.9% времени (допустимое время простоя не более 8.76 часов в год).
-2.2. Система должна корректно обрабатывать ошибки и предоставлять информативные сообщения пользователю.
-3. Безопасность:
-3.1. Все взаимодействия с системой должны быть зашифрованы с использованием протокола HTTPS.
-3.2. Система должна поддерживать многофакторную аутентификацию для административного доступа.
-4. Масштабируемость:
-4.1. Архитектура системы должна поддерживать горизонтальное масштабирование для обработки увеличения нагрузки.
-5. Интеграция:
-5.1. Система должна предоставлять API для интеграции с другими корпоративными системами.
-5.2. Система должна поддерживать добавление новых источников данных без изменения основной архитектуры.
-6. Удобство использования:
-6.1. Интерфейс системы должен быть интуитивно понятным и не требовать специального обучения для базового использования.
-7. Соответствие требованиям:
-7.1. Система должна соответствовать требованиям законодательства о защите персональных данных.
-8. Документация:
-8.1. Система должна иметь полную техническую документацию, включая руководство пользователя и администратора.
-
-
-Конечно, я могу начать наполнять контентом структуру бизнес-требований, используя информацию из юзкейсов и предыдущих обсуждений. Давайте начнем с первых двух глав:
-
-# Бизнес-требования к системе оценки готовности источников данных к интеграции
-
-## 1. Введение
-
-### 1.1 Цель проекта
-
-Основной целью внедрения системы оценки готовности источников данных к интеграции является автоматизация и стандартизация процесса оценки источников данных для их последующей интеграции с Корпоративной Аналитической Платформой (КАП). Проект направлен на решение следующих задач:
-
-1. Автоматизация процесса оценки готовности источников данных к интеграции с КАП
-2. Исключение человеческого фактора при проверке параметров источников
-3. Сокращение времени принятия решения о допуске источника к интеграции
-4. Стандартизация процесса оценки источников данных
-5. Повышение прозрачности и объективности оценки
-
-
-### 1.2 Общее описание системы
-
-Система оценки готовности источников данных представляет собой автоматизированное решение, которое анализирует различные параметры источников данных и рассчитывает индекс их готовности к интеграции с КАП. Система включает в себя следующие ключевые компоненты:
-
-1. Модуль автоматического сбора данных из различных источников и систем
-2. Аналитический движок для расчета индекса готовности на основе 17 ключевых параметров
-3. Интерфейс для предоставления результатов оценки и рекомендаций пользователям
-4. Модуль интеграции с внешними системами для верификации данных
-5. Компонент формирования и отслеживания рекомендаций по улучшению показателей
-
-
-Система предназначена для использования как владельцами источников данных, так и командой КАП, ответственной за интеграцию новых источников.
-
-
-Конечно, я могу начать наполнять контентом структуру бизнес-требований, используя информацию из юзкейсов и предыдущих обсуждений. Давайте начнем с первых двух глав:
-
-# Бизнес-требования к системе оценки готовности источников данных к интеграции
-
-## 1. Введение
-
-### 1.1 Цель проекта
-
-Основной целью внедрения системы оценки готовности источников данных к интеграции является автоматизация и стандартизация процесса оценки источников данных для их последующей интеграции с Корпоративной Аналитической Платформой (КАП). Проект направлен на решение следующих задач:
-
-1. Автоматизация процесса оценки готовности источников данных к интеграции с КАП
-2. Исключение человеческого фактора при проверке параметров источников
-3. Сокращение времени принятия решения о допуске источника к интеграции
-4. Стандартизация процесса оценки источников данных
-5. Повышение прозрачности и объективности оценки
-
-
-### 1.2 Общее описание системы
-
-Система оценки готовности источников данных представляет собой автоматизированное решение, которое анализирует различные параметры источников данных и рассчитывает индекс их готовности к интеграции с КАП. Система включает в себя следующие ключевые компоненты:
-
-1. Модуль автоматического сбора данных из различных источников и систем
-2. Аналитический движок для расчета индекса готовности на основе 17 ключевых параметров
-3. Интерфейс для предоставления результатов оценки и рекомендаций пользователям
-4. Модуль интеграции с внешними системами для верификации данных
-5. Компонент формирования и отслеживания рекомендаций по улучшению показателей
-
-
-Система предназначена для использования как владельцами источников данных, так и командой КАП, ответственной за интеграцию новых источников.
-
-## 2. Основные бизнес-требования
-
-### 2.1 Автоматическая оценка готовности источников данных
-
-Описание: Система должна автоматически оценивать готовность источников данных к интеграции на основе 17 параметров, которые охватывают технические, документационные и архитектурные аспекты.
-
-Обоснование: Автоматизация процесса оценки позволит исключить человеческий фактор, повысить точность и значительно ускорить процесс оценки готовности источников к интеграции.
-
-Связанные юзкейсы: UC-1 "Оценка готовности сервиса к интеграции", UC-1.1 "Извлечение списка критериев из Базы данных"
-
-Методика:
-
-1. Система получает запрос на оценку источника данных от пользователя.
-2. Извлекается список критериев оценки и их весов из базы данных.
-3. Система автоматически собирает данные о источнике из доступных систем (МЕТА, Confluence, Service Manager, Портал ДИ и др.).
-4. На основе собранных данных и заданных критериев рассчитывается индекс готовности.
-5. Результаты оценки предоставляются пользователю с детализацией по каждому параметру.
-
-
-### 2.2 Предоставление рекомендаций по улучшению индекса готовности
-
-Описание: Система должна формировать и предоставлять приоритизированные рекомендации по повышению индекса готовности источника данных.
-
-Обоснование: Четкие рекомендации позволят владельцам источников данных быстрее и эффективнее повышать уровень готовности своих систем к интеграции.
-
-Связанные юзкейсы: UC-2 "Повышение индекса готовности к интеграции" (расширенный)
-
-Методика:
-
-1. После проведения оценки система анализирует параметры, не соответствующие требуемому уровню.
-2. Для каждого такого параметра формируются конкретные рекомендации по улучшению.
-3. Рекомендации приоритизируются на основе их влияния на общий индекс готовности и сложности реализации.
-4. Система формирует план действий с указанием конкретных шагов и ожидаемого эффекта от их выполнения.
-5. Рекомендации и план действий предоставляются пользователю через интерфейс системы.
-6. Система отслеживает прогресс выполнения рекомендаций и обновляет оценку при получении новых данных.
-
-
-Продолжим с остальными разделами в следующем сообщении.
-
-
-Продолжаем наполнение контентом бизнес-требований:
-
-### 2.3 Прозрачность оценки параметров
-
-Описание: Система должна предоставлять детальные объяснения по оценке каждого параметра, включая источники данных и методику расчета.
-
-Обоснование: Прозрачность процесса оценки повысит доверие пользователей к системе и облегчит процесс улучшения показателей источников данных.
-
-Связанные юзкейсы: UC-4 "Объяснение оценки параметра"
-
-Методика:
-
-1. Для каждого оцениваемого параметра система хранит информацию о методике оценки и источниках данных.
-2. При запросе пользователя система формирует детальное объяснение, включающее:
-
-1. Текущее значение параметра
-2. Требуемое значение для положительной оценки
-3. Источники данных, использованные при оценке
-4. Методику расчета оценки
-5. Конкретные причины несоответствия (если применимо)
-
-
-
-3. Система предоставляет возможность пользователю оспорить оценку, предоставив дополнительные данные.
-4. При получении новых данных система пересчитывает оценку и обновляет объяснение.
-
-
-### 2.4 Автоматический сбор данных для оценки
-
-Описание: Система должна уметь оценивать источники данных даже при отсутствии заполненного опросного листа, автоматически собирая необходимую информацию из доступных систем.
-
-Обоснование: Автоматический сбор данных значительно ускорит процесс оценки и снизит нагрузку на пользователей, исключая необходимость ручного заполнения опросных листов.
-
-Связанные юзкейсы: UC-5 "Оценка источника без опросного листа"
-
-Методика:
-
-1. Система идентифицирует источник данных по уникальному идентификатору.
-2. Определяются доступные внешние источники информации для сбора данных (МЕТА, Confluence, Service Manager, Портал ДИ и др.).
-3. Система последовательно обращается к внешним системам и собирает необходимые данные.
-4. Собранные данные анализируются и сопоставляются с критериями оценки.
-5. При недостатке данных система формирует список параметров, требующих дополнительной информации.
-6. Пользователю предоставляется предварительная оценка и запрос на дополнение недостающих данных.
-
-
-Продолжаем наполнение контентом бизнес-требований:
-
-### 2.3 Прозрачность оценки параметров
-
-Описание: Система должна предоставлять детальные объяснения по оценке каждого параметра, включая источники данных и методику расчета.
-
-Обоснование: Прозрачность процесса оценки повысит доверие пользователей к системе и облегчит процесс улучшения показателей источников данных.
-
-Связанные юзкейсы: UC-4 "Объяснение оценки параметра"
-
-Методика:
-
-1. Для каждого оцениваемого параметра система хранит информацию о методике оценки и источниках данных.
-2. При запросе пользователя система формирует детальное объяснение, включающее:
-
-1. Текущее значение параметра
-2. Требуемое значение для положительной оценки
-3. Источники данных, использованные при оценке
-4. Методику расчета оценки
-5. Конкретные причины несоответствия (если применимо)
-
-
-
-3. Система предоставляет возможность пользователю оспорить оценку, предоставив дополнительные данные.
-4. При получении новых данных система пересчитывает оценку и обновляет объяснение.
-
-
-### 2.4 Автоматический сбор данных для оценки
-
-Описание: Система должна уметь оценивать источники данных даже при отсутствии заполненного опросного листа, автоматически собирая необходимую информацию из доступных систем.
-
-Обоснование: Автоматический сбор данных значительно ускорит процесс оценки и снизит нагрузку на пользователей, исключая необходимость ручного заполнения опросных листов.
-
-Связанные юзкейсы: UC-5 "Оценка источника без опросного листа"
-
-Методика:
-
-1. Система идентифицирует источник данных по уникальному идентификатору.
-2. Определяются доступные внешние источники информации для сбора данных (МЕТА, Confluence, Service Manager, Портал ДИ и др.).
-3. Система последовательно обращается к внешним системам и собирает необходимые данные.
-4. Собранные данные анализируются и сопоставляются с критериями оценки.
-5. При недостатке данных система формирует список параметров, требующих дополнительной информации.
-6. Пользователю предоставляется предварительная оценка и запрос на дополнение недостающих данных.
-
-
-### 2.5 Интеграция с внешними системами
-
-Описание: Система должна интегрироваться с необходимыми внешними системами для сбора данных и проверки их достоверности.
-
-Обоснование: Интеграция с внешними системами обеспечит полноту и точность оценки, а также автоматизирует процесс сбора данных.
-
-Связанные юзкейсы: UC-3 "Сбор критериев из внешнего источника"
-
-Методика:
-
-1. Система поддерживает интеграцию со следующими внешними системами:
-
-1. МЕТА (для получения метаданных источника)
-2. Confluence (для получения документации)
-3. Service Manager (для получения информации о сервисе)
-4. Портал ДИ (для получения информации о данных)
-5. Другие релевантные системы
-
-
-
-2. Для каждой интегрируемой системы определяется набор собираемых данных и API для их получения.
-3. Система использует безопасные методы аутентификации для доступа к внешним системам.
-4. При сборе данных система учитывает возможные проблемы с доступностью внешних систем и имеет механизмы обработки ошибок.
-5. Собранные данные верифицируются и сохраняются для дальнейшего использования в оценке.
-
-
-Продолжаем наполнение контентом бизнес-требований:
-
-### 2.3 Прозрачность оценки параметров
-
-Описание: Система должна предоставлять детальные объяснения по оценке каждого параметра, включая источники данных и методику расчета.
-
-Обоснование: Прозрачность процесса оценки повысит доверие пользователей к системе и облегчит процесс улучшения показателей источников данных.
-
-Связанные юзкейсы: UC-4 "Объяснение оценки параметра"
-
-Методика:
-
-1. Для каждого оцениваемого параметра система хранит информацию о методике оценки и источниках данных.
-2. При запросе пользователя система формирует детальное объяснение, включающее:
-
-1. Текущее значение параметра
-2. Требуемое значение для положительной оценки
-3. Источники данных, использованные при оценке
-4. Методику расчета оценки
-5. Конкретные причины несоответствия (если применимо)
-
-
-
-3. Система предоставляет возможность пользователю оспорить оценку, предоставив дополнительные данные.
-4. При получении новых данных система пересчитывает оценку и обновляет объяснение.
-
-
-### 2.4 Автоматический сбор данных для оценки
-
-Описание: Система должна уметь оценивать источники данных даже при отсутствии заполненного опросного листа, автоматически собирая необходимую информацию из доступных систем.
-
-Обоснование: Автоматический сбор данных значительно ускорит процесс оценки и снизит нагрузку на пользователей, исключая необходимость ручного заполнения опросных листов.
-
-Связанные юзкейсы: UC-5 "Оценка источника без опросного листа"
-
-Методика:
-
-1. Система идентифицирует источник данных по уникальному идентификатору.
-2. Определяются доступные внешние источники информации для сбора данных (МЕТА, Confluence, Service Manager, Портал ДИ и др.).
-3. Система последовательно обращается к внешним системам и собирает необходимые данные.
-4. Собранные данные анализируются и сопоставляются с критериями оценки.
-5. При недостатке данных система формирует список параметров, требующих дополнительной информации.
-6. Пользователю предоставляется предварительная оценка и запрос на дополнение недостающих данных.
-
-
-### 2.5 Интеграция с внешними системами
-
-Описание: Система должна интегрироваться с необходимыми внешними системами для сбора данных и проверки их достоверности.
-
-Обоснование: Интеграция с внешними системами обеспечит полноту и точность оценки, а также автоматизирует процесс сбора данных.
-
-Связанные юзкейсы: UC-3 "Сбор критериев из внешнего источника"
-
-Методика:
-
-1. Система поддерживает интеграцию со следующими внешними системами:
-
-1. МЕТА (для получения метаданных источника)
-2. Confluence (для получения документации)
-3. Service Manager (для получения информации о сервисе)
-4. Портал ДИ (для получения информации о данных)
-5. Другие релевантные системы
-
-
-
-2. Для каждой интегрируемой системы определяется набор собираемых данных и API для их получения.
-3. Система использует безопасные методы аутентификации для доступа к внешним системам.
-4. При сборе данных система учитывает возможные проблемы с доступностью внешних систем и имеет механизмы обработки ошибок.
-5. Собранные данные верифицируются и сохраняются для дальнейшего использования в оценке.
-
-
-## 3. Ключевые показатели эффективности (KPI)
-
-1. Время оценки источника:
-
-1. Цель: сокращение с нескольких дней до нескольких минут
-2. Метрика: среднее время от запроса оценки до получения результата
-
-
-
-2. Количество обрабатываемых источников:
-
-1. Цель: увеличение на 50% в месяц
-2. Метрика: количество уникальных источников, оцененных системой за месяц
-
-
-
-3. Точность оценки:
-
-1. Цель: достижение 95% соответствия с экспертной оценкой
-2. Метрика: процент совпадений автоматической оценки с оценкой экспертов на контрольной выборке
-
-
-
-4. Сокращение Time-to-Data (T2D):
-
-1. Цель: уменьшение на 30%
-2. Метрика: среднее время от начала оценки источника до его успешной интеграции в КАП
-
-
-
-5. Удовлетворенность пользователей:
-
-1. Цель: достижение 85% удовлетворенности
-2. Метрика: результаты опросов пользователей системы
-
-
-## 4. Ограничения и допущения
-
-### 4.1 Временные ограничения
-
-- Система должна быть введена в промышленную эксплуатацию до конца текущего года.
-- Разработка и тестирование должны быть завершены за 6 месяцев до запланированной даты запуска.
-
-
-### 4.2 Технологические ограничения
-
-- Необходимость интеграции с существующими внешними системами (МЕТА, Confluence, Service Manager, Портал ДИ) без изменения их архитектуры.
-- Система должна быть разработана с использованием технологий, совместимых с текущей инфраструктурой КАП.
-- Обязательная автоматизация сбора данных по 17 критериям оценки.
-
-
-### 4.3 Нормативные ограничения
-
-- Система должна соответствовать внутренним политикам безопасности и защиты данных компании.
-- Необходимо обеспечить соответствие требованиям регуляторов в области обработки и хранения данных.
-
-
-### 4.4 Допущения
-
-- Предполагается, что все необходимые внешние системы будут доступны для интеграции.
-- Ожидается, что пользователи системы (владельцы источников данных) будут иметь базовые технические знания для работы с системой.
-- Допускается, что некоторые источники данных могут потребовать ручного ввода дополнительной информации при невозможности автоматического сбора всех необходимых данных.
-
-
-## 5. Требования к масштабированию
-
-### 5.1 Охват подразделений
-
-- Система должна обеспечивать работу со всеми подразделениями, интегрирующимися с КАП, включая возможность добавления новых подразделений без существенных изменений в архитектуре.
-
-
-### 5.2 Расширение критериев оценки
-
-- Необходимо предусмотреть возможность добавления новых критериев оценки и изменения весов существующих критериев без необходимости перепроектирования системы.
-- Система должна поддерживать не менее 30 критериев оценки с возможностью расширения до 50.
-
-
-### 5.3 Увеличение количества источников
-
-- Архитектура системы должна обеспечивать эффективную работу при увеличении количества оцениваемых источников данных минимум в 5 раз от начального объема.
-- Производительность системы не должна существенно снижаться при одновременной оценке до 100 источников данных.
-
-
-### 5.4 Расширение интеграций
-
-- Система должна иметь модульную архитектуру, позволяющую легко добавлять интеграции с новыми внешними системами для сбора данных.
-- Необходимо предусмотреть возможность подключения не менее 10 дополнительных внешних систем без существенных изменений в ядре системы.
-
-
-## 6. Глоссарий
-
-- **КАП** (Корпоративная Аналитическая Платформа) - централизованная система для сбора, обработки и анализа данных из различных источников.
-- **Индекс готовности** - числовой показатель, отражающий степень готовности источника данных к интеграции с КАП.
-- **Источник данных** - система или сервис, предоставляющий данные для интеграции с КАП.
-- **ИЗИ** (Индекс Зрелости Источника) - синоним индекса готовности.
-- **Критерии оценки** - набор параметров, используемых для расчета индекса готовности источника данных.
-- **МЕТА** - система метаданных, содержащая информацию о структуре и свойствах данных.
-- **Опросный лист** - форма, заполняемая владельцем источника данных для предоставления информации о системе.
-- **T2D** (Time-to-Data) - время от начала процесса интеграции до момента, когда данные становятся доступными в КАП.
-- **ИИ-агент** - автоматизированный компонент системы, выполняющий сбор и анализ данных для оценки готовности источника.
-
-
-Продолжаем наполнение контентом бизнес-требований:
-
-## 7. Приложения
-
-### 7.1 Детальное описание юзкейсов
-
-#### UC-1: Оценка готовности сервиса к интеграции
-
-Название: Оценка готовности сервиса к интеграции
-
-Акторы:
-
-- Пользователь (владелец сервиса)
-- ИИ-агент
-
-
-Предусловия:
-
-- У ИИ-агента есть доступ к базе данных с критериями оценки, формулами расчета и списком источников данных.
-- Доступны внешние источники информации.
-
-
-Гарантия успеха: Получена оценка зрелости ИЗИ
-
-Основной поток событий:
-
-1. Пользователь запрашивает у ИИ-агента оценку готовности своего источника к интеграции.
-2. ИИ-агент извлекает название источника из запроса и запускает сценарий UC-1.1 Извлечение списка критериев из Базы данных.
-3. На основе полученной информации на шаге 2 ИИ-агент запускает сценарий сбора данных, в рамках которого последовательно обращается к указанным источникам информации для получения актуальных значений по каждому из критериев - UC-3 Сбор критериев из внешнего источника.
-4. ИИ-агент выполняет расчет индекса готовности источника, применяя извлечённые формулы и собранные данные.
-5. ИИ-агент предоставляет пользователю результаты расчетов вместе с оценкой готовности источника к интеграции.
-
-
-Альтернативный поток событий:
-
-1. Если данные недоступны или неполны, ИИ-агент уведомляет об этом пользователя и предлагает предоставить дополнительные сведения.
-
-
-Постусловия:
-
-1. Индекс готовности сервиса сохранен в системе для дальнейшего отслеживания изменений.
-2. ИИ-агент ожидает дальнейших запросов пользователя.
-
-
-Продолжаем наполнение контентом бизнес-требований:
-
-## 7. Приложения
-
-### 7.1 Детальное описание юзкейсов
-
-#### UC-1: Оценка готовности сервиса к интеграции
-
-Название: Оценка готовности сервиса к интеграции
-
-Акторы:
-
-- Пользователь (владелец сервиса)
-- ИИ-агент
-
-
-Предусловия:
-
-- У ИИ-агента есть доступ к базе данных с критериями оценки, формулами расчета и списком источников данных.
-- Доступны внешние источники информации.
-
-
-Гарантия успеха: Получена оценка зрелости ИЗИ
-
-Основной поток событий:
-
-1. Пользователь запрашивает у ИИ-агента оценку готовности своего источника к интеграции.
-2. ИИ-агент извлекает название источника из запроса и запускает сценарий UC-1.1 Извлечение списка критериев из Базы данных.
-3. На основе полученной информации на шаге 2 ИИ-агент запускает сценарий сбора данных, в рамках которого последовательно обращается к указанным источникам информации для получения актуальных значений по каждому из критериев - UC-3 Сбор критериев из внешнего источника.
-4. ИИ-агент выполняет расчет индекса готовности источника, применяя извлечённые формулы и собранные данные.
-5. ИИ-агент предоставляет пользователю результаты расчетов вместе с оценкой готовности источника к интеграции.
-
-
-Альтернативный поток событий:
-
-1. Если данные недоступны или неполны, ИИ-агент уведомляет об этом пользователя и предлагает предоставить дополнительные сведения.
-
-
-Постусловия:
-
-1. Индекс готовности сервиса сохранен в системе для дальнейшего отслеживания изменений.
-2. ИИ-агент ожидает дальнейших запросов пользователя.
-
-
-#### UC-1.1: Извлечение списка критериев из Базы данных
-
-Название: Извлечение списка критериев из Базы знаний
-
-Акторы:
-
-- ИИ-агент
-
-
-Предусловия:
-
-- В базе знаний содержатся критерии оценки
-- ИИ-агент имеет доступ в Базу знаний
-- Определено наименование источника
-
-
-Гарантия успеха: ИИ-агент получил список критериев оценки ИЗИ из Базы данных и готов для дальнейшего использования
-
-Основной поток событий:
-
-1. ИИ-агент получает наименование источника
-2. ИИ-агент устанавливает соединение с Базой данных
-3. ИИ-агент отправляет запрос в Базу данных на получение плана загрузки по объекту репликации
-4. На основании полученного плана загрузки ИИ-агент находит:
-4.1 Список критериев
-4.2 Формула расчета ИЗИ
-4.3 Список API источников информации для расчета.
-5. ИИ-агент извлекает найденную информацию и сохраняет ее локально для последующей обработки
-6. ИИ-агент завершает соединение с Базой данных
-
-
-Альтернативный поток событий:
-
-1. База знаний недоступна
-a. ИИ-агент регистрирует ошибку доступа
-b. ИИ-агент уведомляет пользователя о проблеме доступа к Базе знаний
-c. ИИ-агент отправляет информацию на линию сопровождения об ошибке
-2. В Базе знаний нет критериев оценки
-a. ИИ-агент регистрирует ошибку доступа
-b. ИИ-агент уведомляет пользователя о том что не найдено критериев оценки в Базе знаний
-c. ИИ-агент отправляет информацию на линию сопровождения об ошибке
-
-
-Постусловия:
-
-1. Список критериев успешно извлечен из Базы данных и готов к использованию
-2. Все ошибки и проблемы зафиксированы в журнале и осуществлена рассылка на ответственных лиц
-
-
-#### UC-2: Повышение индекса готовности к интеграции (расширенный)
-
-Название: Повышение индекса готовности к интеграции
-
-Акторы:
-
-- Пользователь (владелец сервиса)
-- ИИ-агент
-
-
-Предусловия:
-
-- У ИИ-агента есть доступ к базе данных с рекомендациями по повышению индекса.
-- Ранее был проведён расчёт индекса готовности сервиса (Сценарий UC-1)
-- ИИ-агент имеет доступ к истории изменений показателей источника
-
-
-Гарантия успеха: Получены приоритизированные рекомендации по повышению уровня ИЗИ с планом действий
-
-Основной поток событий:
-
-
-1. Пользователь запрашивает у ИИ-агента рекомендации по повышению индекса готовности своего сервиса
-2. ИИ-агент получает запрос от пользователя
-3. ИИ-агент проверяет наличие готового ответа в базе знаний (если ранее были даны аналогичные рекомендации)
-4. Если готового ответа нет, ИИ-агент анализирует текущие показатели сервиса и документацию
-5. ИИ-агент формирует конкретные инструкции по улучшению параметров, включая:
-5.1 Приоритизацию рекомендаций по критичности (высокая/средняя/низкая)
-5.2 Оценку сложности реализации каждой рекомендации (трудоёмкость)
-5.3 Ожидаемый прирост индекса после выполнения каждой рекомендации
-5.4 Конкретные шаги для реализации каждой рекомендации
-5.5 Ссылки на необходимые ресурсы и документацию
-6. ИИ-агент формирует план действий с временными рамками
-7. ИИ-агент отправляет рекомендации и план действий пользователю
-8. ИИ-агент создает задачи для отслеживания прогресса по каждой рекомендации
-
-
-Альтернативный поток событий:
-
-1. Если готовых рекомендаций нет, и анализ документации затруднителен:
-a. ИИ-агент предлагает провести дополнительную консультацию с экспертом
-b. ИИ-агент формирует запрос к эксперту с описанием проблемы
-c. После получения ответа от эксперта, ИИ-агент формирует рекомендации
-2. Пользователь запрашивает детализацию по конкретной рекомендации:
-a. ИИ-агент предоставляет расширенное описание рекомендации
-b. ИИ-агент предоставляет примеры успешной реализации
-3. Пользователь сообщает о выполнении рекомендации:
-a. ИИ-агент запускает процесс проверки выполнения
-b. ИИ-агент обновляет статус рекомендации и общий индекс готовности
-
-
-Постусловия:
-
-1. Рекомендации сохраняются в системе для последующего мониторинга прогресса
-2. Создан план действий с конкретными шагами и сроками
-3. Настроены уведомления о необходимости выполнения рекомендаций
-4. Система готова к отслеживанию прогресса по выполнению рекомендаций
-
-
-Продолжаем наполнение контентом бизнес-требований:
-
-#### UC-3: Сбор критериев из внешнего источника
-
-Название: Сбор критериев из внешнего источника
-
-Акторы:
-
-- ИИ-агент
-
-
-Предусловия:
-
-- Известен необходимый параметр для сбора данных (критерий)
-- Известен источник данных критерия
-- ИИ-агент имеет доступ к источнику данных через API или иную интеграцию (МЕТА, Confluence, Service Manager, Портал ДИ Sberinfra, Пульс, Nexus)
-
-
-Гарантия успеха: Получена информация из источника данных, согласно критериям в базе знаний
-
-Основной поток событий:
-
-1. ИИ-агент определяет какую информацию нужно собрать
-2. ИИ-агент идентифицирует источник данных для извлечения информации
-3. ИИ-агент подключается к источнику данных
-4. ИИ-агент выполняет поиск информации в соответствующем источнике
-5. ИИ-агент извлекает найденную информацию и сохраняет ее локально для последующей обработки
-6. ИИ-агент завершает работу с внешним источником
-
-
-Альтернативный поток событий:
-
-1. Нет соединения с источником данных
-a. Регистрирует ошибку
-b. ИИ-агент уведомляет пользователя о невозможности собрать информацию в связи с проблемой доступа к источнику
-2. Не найдены данные
-a. ИИ-агент уведомляет пользователя о невозможности собрать информацию в связи с отсутствием данных
-b. Фиксирует ошибку в журнале
-
-
-Постусловия:
-
-1. Собранная информация доступна для дальнейших вычислений
-2. Все ошибки и проблемы зафиксированы в журнале
-
-
-Продолжаем наполнение контентом бизнес-требований:
-
-#### UC-3: Сбор критериев из внешнего источника
-
-Название: Сбор критериев из внешнего источника
-
-Акторы:
-
-- ИИ-агент
-
-
-Предусловия:
-
-- Известен необходимый параметр для сбора данных (критерий)
-- Известен источник данных критерия
-- ИИ-агент имеет доступ к источнику данных через API или иную интеграцию (МЕТА, Confluence, Service Manager, Портал ДИ Sberinfra, Пульс, Nexus)
-
-
-Гарантия успеха: Получена информация из источника данных, согласно критериям в базе знаний
-
-Основной поток событий:
-
-1. ИИ-агент определяет какую информацию нужно собрать
-2. ИИ-агент идентифицирует источник данных для извлечения информации
-3. ИИ-агент подключается к источнику данных
-4. ИИ-агент выполняет поиск информации в соответствующем источнике
-5. ИИ-агент извлекает найденную информацию и сохраняет ее локально для последующей обработки
-6. ИИ-агент завершает работу с внешним источником
-
-
-Альтернативный поток событий:
-
-1. Нет соединения с источником данных
-a. Регистрирует ошибку
-b. ИИ-агент уведомляет пользователя о невозможности собрать информацию в связи с проблемой доступа к источнику
-2. Не найдены данные
-a. ИИ-агент уведомляет пользователя о невозможности собрать информацию в связи с отсутствием данных
-b. Фиксирует ошибку в журнале
-
-
-Постусловия:
-
-1. Собранная информация доступна для дальнейших вычислений
-2. Все ошибки и проблемы зафиксированы в журнале
-
-
-#### UC-4: Объяснение оценки параметра
-
-Название: Объяснение оценки параметра
-
-Акторы:
-
-- Пользователь (владелец сервиса)
-- ИИ-агент
-
-
-Предусловия:
-
-- У ИИ-агента есть доступ к базе данных с критериями оценки и их весами
-- Ранее был проведён расчёт индекса готовности сервиса (Сценарий UC-1)
-- ИИ-агент имеет доступ к истории расчётов и источникам данных, использованным для оценки
-
-
-Гарантия успеха: Пользователь получил детальное объяснение оценки конкретного параметра с доказательной базой
-
-Основной поток событий:
-
-1. Пользователь не соглашается с оценкой конкретного параметра и запрашивает объяснение
-a. Пример запроса - "Почему параметр X оценен как невыполненный?"
-2. ИИ-агент получает запрос и идентифицирует параметр, требующий объяснения
-3. ИИ-агент извлекает из базы данных:
-3.1 Критерии оценки данного параметра
-3.2 Пороговые значения для разных уровней оценки
-3.3 Источники данных, использованные при оценке
-4. ИИ-агент формирует объяснение, включающее:
-4.1 Текущее значение параметра
-4.2 Требуемое значение для положительной оценки
-4.3 Конкретные причины несоответствия
-4.4 Ссылки на источники данных, подтверждающие оценку
-5. ИИ-агент предоставляет пользователю детальное объяснение
-6. ИИ-агент предлагает конкретные шаги для улучшения оценки параметра
-
-
-Альтернативный поток событий:
-
-1. Пользователь предоставляет дополнительные данные, опровергающие текущую оценку
-a. ИИ-агент анализирует новые данные
-b. ИИ-агент проверяет достоверность новых данных
-c. Если новые данные подтверждены, ИИ-агент пересчитывает оценку параметра
-d. ИИ-агент обновляет общий индекс готовности
-2. Запрошенный параметр не найден в базе оценок
-a. ИИ-агент уведомляет пользователя о невозможности предоставить объяснение
-b. ИИ-агент предлагает список доступных для объяснения параметров
-
-
-Постусловия:
-
-1. Пользователь получил детальное объяснение оценки параметра
-2. Объяснение сохранено в системе для последующего использования
-3. Если были предоставлены и подтверждены новые данные, оценка параметра и общий индекс обновлены
-
-
-Продолжаем наполнение контентом бизнес-требований:
-
-#### UC-3: Сбор критериев из внешнего источника
-
-Название: Сбор критериев из внешнего источника
-
-Акторы:
-
-- ИИ-агент
-
-
-Предусловия:
-
-- Известен необходимый параметр для сбора данных (критерий)
-- Известен источник данных критерия
-- ИИ-агент имеет доступ к источнику данных через API или иную интеграцию (МЕТА, Confluence, Service Manager, Портал ДИ Sberinfra, Пульс, Nexus)
-
-
-Гарантия успеха: Получена информация из источника данных, согласно критериям в базе знаний
-
-Основной поток событий:
-
-1. ИИ-агент определяет какую информацию нужно собрать
-2. ИИ-агент идентифицирует источник данных для извлечения информации
-3. ИИ-агент подключается к источнику данных
-4. ИИ-агент выполняет поиск информации в соответствующем источнике
-5. ИИ-агент извлекает найденную информацию и сохраняет ее локально для последующей обработки
-6. ИИ-агент завершает работу с внешним источником
-
-
-Альтернативный поток событий:
-
-1. Нет соединения с источником данных
-a. Регистрирует ошибку
-b. ИИ-агент уведомляет пользователя о невозможности собрать информацию в связи с проблемой доступа к источнику
-2. Не найдены данные
-a. ИИ-агент уведомляет пользователя о невозможности собрать информацию в связи с отсутствием данных
-b. Фиксирует ошибку в журнале
-
-
-Постусловия:
-
-1. Собранная информация доступна для дальнейших вычислений
-2. Все ошибки и проблемы зафиксированы в журнале
-
-
-#### UC-4: Объяснение оценки параметра
-
-Название: Объяснение оценки параметра
-
-Акторы:
-
-- Пользователь (владелец сервиса)
-- ИИ-агент
-
-
-Предусловия:
-
-- У ИИ-агента есть доступ к базе данных с критериями оценки и их весами
-- Ранее был проведён расчёт индекса готовности сервиса (Сценарий UC-1)
-- ИИ-агент имеет доступ к истории расчётов и источникам данных, использованным для оценки
-
-
-Гарантия успеха: Пользователь получил детальное объяснение оценки конкретного параметра с доказательной базой
-
-Основной поток событий:
-
-1. Пользователь не соглашается с оценкой конкретного параметра и запрашивает объяснение
-a. Пример запроса - "Почему параметр X оценен как невыполненный?"
-2. ИИ-агент получает запрос и идентифицирует параметр, требующий объяснения
-3. ИИ-агент извлекает из базы данных:
-3.1 Критерии оценки данного параметра
-3.2 Пороговые значения для разных уровней оценки
-3.3 Источники данных, использованные при оценке
-4. ИИ-агент формирует объяснение, включающее:
-4.1 Текущее значение параметра
-4.2 Требуемое значение для положительной оценки
-4.3 Конкретные причины несоответствия
-4.4 Ссылки на источники данных, подтверждающие оценку
-5. ИИ-агент предоставляет пользователю детальное объяснение
-6. ИИ-агент предлагает конкретные шаги для улучшения оценки параметра
-
-
-Альтернативный поток событий:
-
-1. Пользователь предоставляет дополнительные данные, опровергающие текущую оценку
-a. ИИ-агент анализирует новые данные
-b. ИИ-агент проверяет достоверность новых данных
-c. Если новые данные подтверждены, ИИ-агент пересчитывает оценку параметра
-d. ИИ-агент обновляет общий индекс готовности
-2. Запрошенный параметр не найден в базе оценок
-a. ИИ-агент уведомляет пользователя о невозможности предоставить объяснение
-b. ИИ-агент предлагает список доступных для объяснения параметров
-
-
-Постусловия:
-
-1. Пользователь получил детальное объяснение оценки параметра
-2. Объяснение сохранено в системе для последующего использования
-3. Если были предоставлены и подтверждены новые данные, оценка параметра и общий индекс обновлены
-
-
-#### UC-5: Оценка источника без опросного листа
-
-Название: Оценка источника без опросного листа
-
-Акторы:
-
-- Пользователь (владелец сервиса)
-- ИИ-агент
-
-
-Предусловия:
-
-- У ИИ-агента есть доступ к базе данных с критериями оценки
-- Известен уникальный идентификатор пользователя/источника
-- ИИ-агент имеет доступ к внешним системам (МЕТА, Confluence, Service Manager, Портал ДИ и др.)
-
-
-Гарантия успеха: Получена предварительная оценка зрелости ИЗИ на основе автоматически собранных данных
-
-Основной поток событий:
-
-
-
-
-1. Пользователь запрашивает оценку готовности источника без предоставления опросного листа
-2. ИИ-агент идентифицирует источник по уникальному идентификатору пользователя
-3. ИИ-агент извлекает список критериев оценки из базы данных (Сценарий UC-1.1)
-4. ИИ-агент определяет доступные внешние источники информации для сбора данных
-5. ИИ-агент последовательно обращается к внешним системам:
-5.1 МЕТА для получения метаданных источника
-5.2 Confluence для получения документации
-5.3 Service Manager для получения информации о сервисе
-5.4 Портал ДИ для получения информации о данных
-5.5 Другие доступные системы
-6. ИИ-агент анализирует собранные данные и сопоставляет их с критериями оценки
-7. ИИ-агент выполняет расчет индекса готовности на основе доступных данных
-8. ИИ-агент отмечает параметры, для которых не удалось собрать данные
-9. ИИ-агент предоставляет пользователю:
-9.1 Предварительную оценку готовности
-9.2 Список параметров, требующих дополнительной информации
-9.3 Форму для заполнения недостающих данных
-
-
-Альтернативный поток событий:
-
-1. Не удается идентифицировать источник по уникальному идентификатору
-a. ИИ-агент запрашивает у пользователя дополнительную информацию для идентификации
-2. Недостаточно данных для минимальной оценки
-a. ИИ-агент уведомляет пользователя о невозможности провести оценку
-b. ИИ-агент предоставляет форму опросного листа для заполнения
-3. Проблемы доступа к внешним системам
-a. ИИ-агент регистрирует ошибки доступа
-b. ИИ-агент продолжает оценку на основе доступных данных
-c. ИИ-агент отмечает параметры, которые не удалось оценить из-за проблем доступа
-
-
-Постусловия:
-
-1. Предварительная оценка готовности источника сохранена в системе
-2. Создан список недостающих данных для уточнения оценки
-3. Пользователю предоставлена возможность дополнить недостающие данные
-4. Все ошибки и проблемы зафиксированы в журнале
-
-
-Продолжаем наполнение контентом бизнес-требований:
-
-#### UC-3: Сбор критериев из внешнего источника
-
-Название: Сбор критериев из внешнего источника
-
-Акторы:
-
-- ИИ-агент
-
-
-Предусловия:
-
-- Известен необходимый параметр для сбора данных (критерий)
-- Известен источник данных критерия
-- ИИ-агент имеет доступ к источнику данных через API или иную интеграцию (МЕТА, Confluence, Service Manager, Портал ДИ Sberinfra, Пульс, Nexus)
-
-
-Гарантия успеха: Получена информация из источника данных, согласно критериям в базе знаний
-
-Основной поток событий:
-
-1. ИИ-агент определяет какую информацию нужно собрать
-2. ИИ-агент идентифицирует источник данных для извлечения информации
-3. ИИ-агент подключается к источнику данных
-4. ИИ-агент выполняет поиск информации в соответствующем источнике
-5. ИИ-агент извлекает найденную информацию и сохраняет ее локально для последующей обработки
-6. ИИ-агент завершает работу с внешним источником
-
-
-Альтернативный поток событий:
-
-1. Нет соединения с источником данных
-a. Регистрирует ошибку
-b. ИИ-агент уведомляет пользователя о невозможности собрать информацию в связи с проблемой доступа к источнику
-2. Не найдены данные
-a. ИИ-агент уведомляет пользователя о невозможности собрать информацию в связи с отсутствием данных
-b. Фиксирует ошибку в журнале
-
-
-Постусловия:
-
-1. Собранная информация доступна для дальнейших вычислений
-2. Все ошибки и проблемы зафиксированы в журнале
-
-
-#### UC-4: Объяснение оценки параметра
-
-Название: Объяснение оценки параметра
-
-Акторы:
-
-- Пользователь (владелец сервиса)
-- ИИ-агент
-
-
-Предусловия:
-
-- У ИИ-агента есть доступ к базе данных с критериями оценки и их весами
-- Ранее был проведён расчёт индекса готовности сервиса (Сценарий UC-1)
-- ИИ-агент имеет доступ к истории расчётов и источникам данных, использованным для оценки
-
-
-Гарантия успеха: Пользователь получил детальное объяснение оценки конкретного параметра с доказательной базой
-
-Основной поток событий:
-
-1. Пользователь не соглашается с оценкой конкретного параметра и запрашивает объяснение
-a. Пример запроса - "Почему параметр X оценен как невыполненный?"
-2. ИИ-агент получает запрос и идентифицирует параметр, требующий объяснения
-3. ИИ-агент извлекает из базы данных:
-3.1 Критерии оценки данного параметра
-3.2 Пороговые значения для разных уровней оценки
-3.3 Источники данных, использованные при оценке
-4. ИИ-агент формирует объяснение, включающее:
-4.1 Текущее значение параметра
-4.2 Требуемое значение для положительной оценки
-4.3 Конкретные причины несоответствия
-4.4 Ссылки на источники данных, подтверждающие оценку
-5. ИИ-агент предоставляет пользователю детальное объяснение
-6. ИИ-агент предлагает конкретные шаги для улучшения оценки параметра
-
-
-Альтернативный поток событий:
-
-1. Пользователь предоставляет дополнительные данные, опровергающие текущую оценку
-a. ИИ-агент анализирует новые данные
-b. ИИ-агент проверяет достоверность новых данных
-c. Если новые данные подтверждены, ИИ-агент пересчитывает оценку параметра
-d. ИИ-агент обновляет общий индекс готовности
-2. Запрошенный параметр не найден в базе оценок
-a. ИИ-агент уведомляет пользователя о невозможности предоставить объяснение
-b. ИИ-агент предлагает список доступных для объяснения параметров
-
-
-Постусловия:
-
-1. Пользователь получил детальное объяснение оценки параметра
-2. Объяснение сохранено в системе для последующего использования
-3. Если были предоставлены и подтверждены новые данные, оценка параметра и общий индекс обновлены
-
-
-#### UC-5: Оценка источника без опросного листа
-
-Название: Оценка источника без опросного листа
-
-Акторы:
-
-- Пользователь (владелец сервиса)
-- ИИ-агент
-
-
-Предусловия:
-
-- У ИИ-агента есть доступ к базе данных с критериями оценки
-- Известен уникальный идентификатор пользователя/источника
-- ИИ-агент имеет доступ к внешним системам (МЕТА, Confluence, Service Manager, Портал ДИ и др.)
-
-
-Гарантия успеха: Получена предварительная оценка зрелости ИЗИ на основе автоматически собранных данных
-
-Основной поток событий:
-
-
-1. Пользователь запрашивает оценку готовности источника без предоставления опросного листа
-2. ИИ-агент идентифицирует источник по уникальному идентификатору пользователя
-3. ИИ-агент извлекает список критериев оценки из базы данных (Сценарий UC-1.1)
-4. ИИ-агент определяет доступные внешние источники информации для сбора данных
-5. ИИ-агент последовательно обращается к внешним системам:
-5.1 МЕТА для получения метаданных источника
-5.2 Confluence для получения документации
-5.3 Service Manager для получения информации о сервисе
-5.4 Портал ДИ для получения информации о данных
-5.5 Другие доступные системы
-6. ИИ-агент анализирует собранные данные и сопоставляет их с критериями оценки
-7. ИИ-агент выполняет расчет индекса готовности на основе доступных данных
-8. ИИ-агент отмечает параметры, для которых не удалось собрать данные
-9. ИИ-агент предоставляет пользователю:
-9.1 Предварительную оценку готовности
-9.2 Список параметров, требующих дополнительной информации
-9.3 Форму для заполнения недостающих данных
-
-
-Альтернативный поток событий:
-
-1. Не удается идентифицировать источник по уникальному идентификатору
-a. ИИ-агент запрашивает у пользователя дополнительную информацию для идентификации
-2. Недостаточно данных для минимальной оценки
-a. ИИ-агент уведомляет пользователя о невозможности провести оценку
-b. ИИ-агент предоставляет форму опросного листа для заполнения
-3. Проблемы доступа к внешним системам
-a. ИИ-агент регистрирует ошибки доступа
-b. ИИ-агент продолжает оценку на основе доступных данных
-c. ИИ-агент отмечает параметры, которые не удалось оценить из-за проблем доступа
-
-
-Постусловия:
-
-1. Предварительная оценка готовности источника сохранена в системе
-2. Создан список недостающих данных для уточнения оценки
-3. Пользователю предоставлена возможность дополнить недостающие данные
-4. Все ошибки и проблемы зафиксированы в журнале
-
-
-### 7.2 Методика расчета индекса готовности
-
-Индекс готовности (ИГ) источника данных рассчитывается на основе 17 ключевых параметров, разделенных на три категории: технические, документационные и архитектурные. Каждый параметр имеет свой вес в общей оценке.
-
-Формула расчета:
-ИГ = (Σ(Вес_параметра * Оценка_параметра)) / (Σ Вес_параметра) * 100%
-
-где:
-
-- Вес_параметра - числовое значение от 0 до 1, отражающее важность параметра
-- Оценка_параметра - бинарное значение (0 или 1), где 1 означает соответствие требованиям, а 0 - несоответствие
-
-
-Пример параметров и их весов:
-
-1. Техническая категория (общий вес 0.5):
-
-1. Доступность API (вес 0.2)
-2. Производительность (вес 0.15)
-3. Безопасность (вес 0.15)
-
-
-
-2. Документационная категория (общий вес 0.3):
-
-1. Наличие актуальной технической документации (вес 0.1)
-2. Описание структуры данных (вес 0.1)
-3. Инструкции по интеграции (вес 0.1)
-
-
-
-3. Архитектурная категория (общий вес 0.2):
-
-1. Соответствие стандартам КАП (вес 0.1)
-2. Масштабируемость (вес 0.05)
-3. Отказоустойчивость (вес 0.05)
-
-
-
-
-
-Итоговый индекс готовности выражается в процентах, где:
-
-- 0-50% - низкая готовность
-- 51-75% - средняя готовность
-- 76-100% - высокая готовность
-
-
-Продолжаем наполнение контентом бизнес-требований:
-
-#### UC-3: Сбор критериев из внешнего источника
-
-Название: Сбор критериев из внешнего источника
-
-Акторы:
-
-- ИИ-агент
-
-
-Предусловия:
-
-- Известен необходимый параметр для сбора данных (критерий)
-- Известен источник данных критерия
-- ИИ-агент имеет доступ к источнику данных через API или иную интеграцию (МЕТА, Confluence, Service Manager, Портал ДИ Sberinfra, Пульс, Nexus)
-
-
-Гарантия успеха: Получена информация из источника данных, согласно критериям в базе знаний
-
-Основной поток событий:
-
-1. ИИ-агент определяет какую информацию нужно собрать
-2. ИИ-агент идентифицирует источник данных для извлечения информации
-3. ИИ-агент подключается к источнику данных
-4. ИИ-агент выполняет поиск информации в соответствующем источнике
-5. ИИ-агент извлекает найденную информацию и сохраняет ее локально для последующей обработки
-6. ИИ-агент завершает работу с внешним источником
-
-
-Альтернативный поток событий:
-
-1. Нет соединения с источником данных
-a. Регистрирует ошибку
-b. ИИ-агент уведомляет пользователя о невозможности собрать информацию в связи с проблемой доступа к источнику
-2. Не найдены данные
-a. ИИ-агент уведомляет пользователя о невозможности собрать информацию в связи с отсутствием данных
-b. Фиксирует ошибку в журнале
-
-
-Постусловия:
-
-1. Собранная информация доступна для дальнейших вычислений
-2. Все ошибки и проблемы зафиксированы в журнале
-
-
-#### UC-4: Объяснение оценки параметра
-
-Название: Объяснение оценки параметра
-
-Акторы:
-
-- Пользователь (владелец сервиса)
-- ИИ-агент
-
-
-Предусловия:
-
-- У ИИ-агента есть доступ к базе данных с критериями оценки и их весами
-- Ранее был проведён расчёт индекса готовности сервиса (Сценарий UC-1)
-- ИИ-агент имеет доступ к истории расчётов и источникам данных, использованным для оценки
-
-
-Гарантия успеха: Пользователь получил детальное объяснение оценки конкретного параметра с доказательной базой
-
-Основной поток событий:
-
-1. Пользователь не соглашается с оценкой конкретного параметра и запрашивает объяснение
-a. Пример запроса - "Почему параметр X оценен как невыполненный?"
-2. ИИ-агент получает запрос и идентифицирует параметр, требующий объяснения
-3. ИИ-агент извлекает из базы данных:
-3.1 Критерии оценки данного параметра
-3.2 Пороговые значения для разных уровней оценки
-3.3 Источники данных, использованные при оценке
-4. ИИ-агент формирует объяснение, включающее:
-4.1 Текущее значение параметра
-4.2 Требуемое значение для положительной оценки
-4.3 Конкретные причины несоответствия
-4.4 Ссылки на источники данных, подтверждающие оценку
-5. ИИ-агент предоставляет пользователю детальное объяснение
-6. ИИ-агент предлагает конкретные шаги для улучшения оценки параметра
-
-
-Альтернативный поток событий:
-
-1. Пользователь предоставляет дополнительные данные, опровергающие текущую оценку
-a. ИИ-агент анализирует новые данные
-b. ИИ-агент проверяет достоверность новых данных
-c. Если новые данные подтверждены, ИИ-агент пересчитывает оценку параметра
-d. ИИ-агент обновляет общий индекс готовности
-2. Запрошенный параметр не найден в базе оценок
-a. ИИ-агент уведомляет пользователя о невозможности предоставить объяснение
-b. ИИ-агент предлагает список доступных для объяснения параметров
-
-
-Постусловия:
-
-1. Пользователь получил детальное объяснение оценки параметра
-2. Объяснение сохранено в системе для последующего использования
-3. Если были предоставлены и подтверждены новые данные, оценка параметра и общий индекс обновлены
-
-
-#### UC-5: Оценка источника без опросного листа
-
-Название: Оценка источника без опросного листа
-
-Акторы:
-
-- Пользователь (владелец сервиса)
-- ИИ-агент
-
-
-Предусловия:
-
-- У ИИ-агента есть доступ к базе данных с критериями оценки
-- Известен уникальный идентификатор пользователя/источника
-- ИИ-агент имеет доступ к внешним системам (МЕТА, Confluence, Service Manager, Портал ДИ и др.)
-
-
-Гарантия успеха: Получена предварительная оценка зрелости ИЗИ на основе автоматически собранных данных
-
-Основной поток событий:
-
-
-1. Пользователь запрашивает оценку готовности источника без предоставления опросного листа
-2. ИИ-агент идентифицирует источник по уникальному идентификатору пользователя
-3. ИИ-агент извлекает список критериев оценки из базы данных (Сценарий UC-1.1)
-4. ИИ-агент определяет доступные внешние источники информации для сбора данных
-5. ИИ-агент последовательно обращается к внешним системам:
-5.1 МЕТА для получения метаданных источника
-5.2 Confluence для получения документации
-5.3 Service Manager для получения информации о сервисе
-5.4 Портал ДИ для получения информации о данных
-5.5 Другие доступные системы
-6. ИИ-агент анализирует собранные данные и сопоставляет их с критериями оценки
-7. ИИ-агент выполняет расчет индекса готовности на основе доступных данных
-8. ИИ-агент отмечает параметры, для которых не удалось собрать данные
-9. ИИ-агент предоставляет пользователю:
-9.1 Предварительную оценку готовности
-9.2 Список параметров, требующих дополнительной информации
-9.3 Форму для заполнения недостающих данных
-
-
-Альтернативный поток событий:
-
-1. Не удается идентифицировать источник по уникальному идентификатору
-a. ИИ-агент запрашивает у пользователя дополнительную информацию для идентификации
-2. Недостаточно данных для минимальной оценки
-a. ИИ-агент уведомляет пользователя о невозможности провести оценку
-b. ИИ-агент предоставляет форму опросного листа для заполнения
-3. Проблемы доступа к внешним системам
-a. ИИ-агент регистрирует ошибки доступа
-b. ИИ-агент продолжает оценку на основе доступных данных
-c. ИИ-агент отмечает параметры, которые не удалось оценить из-за проблем доступа
-
-
-Постусловия:
-
-1. Предварительная оценка готовности источника сохранена в системе
-2. Создан список недостающих данных для уточнения оценки
-3. Пользователю предоставлена возможность дополнить недостающие данные
-4. Все ошибки и проблемы зафиксированы в журнале
-
-
-### 7.2 Методика расчета индекса готовности
-
-Индекс готовности (ИГ) источника данных рассчитывается на основе 17 ключевых параметров, разделенных на три категории: технические, документационные и архитектурные. Каждый параметр имеет свой вес в общей оценке.
-
-Формула расчета:
-ИГ = (Σ(Вес_параметра * Оценка_параметра)) / (Σ Вес_параметра) * 100%
-
-где:
-
-- Вес_параметра - числовое значение от 0 до 1, отражающее важность параметра
-- Оценка_параметра - бинарное значение (0 или 1), где 1 означает соответствие требованиям, а 0 - несоответствие
-
-
-Пример параметров и их весов:
-
-1. Техническая категория (общий вес 0.5):
-
-1. Доступность API (вес 0.2)
-2. Производительность (вес 0.15)
-3. Безопасность (вес 0.15)
-
-
-
-2. Документационная категория (общий вес 0.3):
-
-1. Наличие актуальной технической документации (вес 0.1)
-2. Описание структуры данных (вес 0.1)
-3. Инструкции по интеграции (вес 0.1)
-
-
-
-3. Архитектурная категория (общий вес 0.2):
-
-1. Соответствие стандартам КАП (вес 0.1)
-2. Масштабируемость (вес 0.05)
-3. Отказоустойчивость (вес 0.05)
-
-
-
-
-
-Итоговый индекс готовности выражается в процентах, где:
-
-- 0-50% - низкая готовность
-- 51-75% - средняя готовность
-- 76-100% - высокая готовность
-
-
-### 7.3 Список интегрируемых внешних систем
-
-1. МЕТА
-
-1. Назначение: Система метаданных
-2. Получаемые данные: Структура и свойства данных источника
-
-
-
-2. Confluence
-
-1. Назначение: Система документации
-2. Получаемые данные: Техническая документация, инструкции по интеграции
-
-
-
-3. Service Manager
-
-1. Назначение: Система управления IT-услугами
-2. Получаемые данные: Информация о сервисе, SLA, инциденты
-
-
-
-4. Портал ДИ Sberinfra
-
-1. Назначение: Портал данных и информации
-2. Получаемые данные: Детальная информация о данных, их качестве и использовании
-
-
-
-5. Пульс
-
-1. Назначение: Система мониторинга
-2. Получаемые данные: Показатели производительности и доступности
-
-
-
-6. Nexus
-
-1. Назначение: Репозиторий артефактов
-2. Получаемые данные: Информация о версиях и зависимостях
-
-
-
-7. GitLab
-
-1. Назначение: Система контроля версий
-2. Получаемые данные: Исходный код, история изменений
-
-
-
-8. Jira
-
-1. Назначение: Система управления проектами
-2. Получаемые данные: Задачи, связанные с интеграцией, статус работ
-
-
-
-9. Grafana
-
-
-
-
-1. Назначение: Система визуализации метрик
-2. Получаемые данные: Графики производительности, использования ресурсов
-
-
-
-10. Active Directory
-
-1. Назначение: Служба каталогов
-2. Получаемые данные: Информация о пользователях и группах доступа
+           * Создать/обновить модели данных (ORM) для таблицы assignments.
+           * Реализовать контроллеры/обработчики для эндпоинтов:
+               * POST /api/v1/templates/{templateId}/publish (публикация с авто-назначением)
+               * POST /api/v1/assignments (ручное назначение)
+               * POST /api/v1/assignments/unlock (массовая разблокировка)
+               * POST /api/v1/assignments/{assignmentId}/claim (взятие задания в работу)
+               * GET /api/v1/assignments/my (задания для текущего пользователя)
+               * GET /api/v1/assignments (все задания для модератора)
+               * PUT /api/v1/assignments/{assignmentId} (изменение статуса, например, CANCELLED)
+           * Написать логику маппинга JSON в БД.
+           * Обеспечить правильную обработку ошибок и валидацию данных.
+           * Написать юнит-тесты для реализованного функционала.
+       * Зависимости: Задача 2.1.
+
+   * Задача 2.3 (Frontend): UI конструктора опросников.
+       * Что внутри:
+           * Разработать страницы/компоненты для модератора:
+               * Список шаблонов (GET /templates).
+               * Форма создания/редактирования шаблона с динамическим добавлением/удалением пунктов и полей (POST /templates, PUT /templates).
+               * Функционал публикации шаблона (POST /templates/{templateId}/publish).
+               * Просмотр версий шаблона (GET /templates/{templateId}/versions/{versionNumber}).
+           * Интегрировать с соответствующими API-эндпоинтами.
+           * Написать UI-тесты.
+       * Зависимости: Задача 1.4, Задача 2.1.
+
+   * Задача 2.4 (Frontend): UI для управления назначениями.
+       * Что внутри:
+           * Разработать страницы/компоненты для модератора:
+               * Список всех заданий (GET /assignments).
+               * Функционал фильтрации и поиска заданий.
+               * Кнопки для разблокировки заданий (POST /assignments/unlock).
+               * Форма для ручного назначения заданий (POST /assignments).
+           * Интегрировать с соответствующими API-эндпоинтами.
+           * Написать UI-тесты.
+       * Зависимости: Задача 1.4, Задача 2.2.
+
+  Epic 3: `[USER]` - Функционал заполнения и проверки
+
+   * Задача 3.1 (Backend): API для загрузки файлов (Upload).
+       * Что внутри:
+           * Реализовать эндпоинт POST /api/v1/files/upload.
+           * Логика: При получении multipart/form-data запроса:
+               1. Сгенерировать уникальное имя файла (например, UUID + расширение).
+               2. Сохранить файл на диск в папку /var/data/questionnaire_uploads.
+               3. Вернуть фронтенду JSON с filePath (уникальное имя) и originalFilename (исходное имя файла).
+           * Обеспечить правильную обработку ошибок (например, превышение размера файла, недопустимый тип файла).
+           * Написать юнит-тесты.
+       * Зависимости: Задача 1.1.
+
+
+      * Задача 3.2 (Backend): API для отправки `submissions` и безопасной выгрузки файлов (Download).
+       * Что внутри:
+           * Создать/обновить модели данных (ORM) для таблиц submissions, answers.
+           * Реализовать контроллеры/обработчики для следующих эндпоинтов:
+               * POST /api/v1/submissions:
+                   * Логика: Создать запись в submissions (используя assignmentId, versionId, userId). Затем в цикле для каждого ответа из запроса
+                     создать запись в answers (используя submissionId, fieldId, textAnswer или filePath/originalFilename).
+               * GET /api/v1/submissions/{submissionId}:
+                   * Логика: Собрать сложный JSON-объект, объединяя данные из submissions, answers, fields, questionnaire_items, users. Для файловых
+                     ответов конструировать downloadUrl (ссылку на GET /api/v1/submissions/{submissionId}/answers/{answerId}/file).
+               * PUT /api/v1/submissions/{submissionId}:
+                   * Логика: Обновить submissions.status. Затем в цикле обновить записи в answers (сбросить validation_status на PENDING, обновить
+                     textAnswer или filePath/originalFilename).
+               * POST /api/v1/answers/{answerId}/validate:
+                   * Логика: Обновить answers.validation_status и moderator_comment для конкретного ответа.
+               * GET /api/v1/submissions/{submissionId}/answers/{answerId}/file:
+                   * Логика: Проверить аутентификацию и авторизацию пользователя (имеет ли он право на доступ к этому файлу). Если права есть,
+                     прочитать файл с диска по file_path из БД и потоково передать его клиенту.
+           * Написать логику маппинга JSON в БД.
+           * Обеспечить правильную обработку ошибок и валидацию данных.
+           * Написать юнит-тесты.
+       * Зависимости: Задача 1.1, Задача 3.1.
+
+   * Задача 3.3 (Frontend): UI для заполнения опросника.
+       * Что внутри:
+           * Разработать UI для пользователя:
+               * Страница со списком его заданий (GET /assignments/my).
+               * Компонент для динамического рендеринга формы опросника на основе JSON-структуры (GET 
+                 /templates/{templateId}/versions/{versionNumber}).
+               * Логика загрузки файлов (POST /files/upload) и отображения их статуса.
+               * Логика сбора данных из формы и отправки на POST /submissions.
+               * Логика "взятия в работу" задания (POST /assignments/{assignmentId}/claim).
+           * Написать UI-тесты.
+       * Зависимости: Задача 1.4, Задача 2.2, Задача 3.1, Задача 3.2.
+
+   * Задача 3.4 (Frontend): UI для проверки опросника.
+       * Что внутри:
+           * Разработать UI для модератора:
+               * Страница со списком работ, ожидающих проверки (GET /submissions).
+               * Экран детального просмотра заполненной работы (GET /submissions/{submissionId}).
+               * Отображение ответов, комментариев, статусов валидации.
+               * Функционал безопасного скачивания файлов (GET /api/v1/submissions/{submissionId}/answers/{answerId}/file).
+               * Кнопки для утверждения/отклонения отдельных ответов (POST /answers/{answerId}/validate) и всей работы (PUT 
+                 /submissions/{submissionId}).
+           * Написать UI-тесты.
+       * Зависимости: Задача 1.4, Задача 3.2.
+
+  Epic 4: `[DEVOPS]` - Настройка Nginx и развертывание
+
+   * Задача 4.1 (DevOps): Настройка Nginx и окружений.
+       * Что внутри:
+           * Настроить Nginx для проксирования всех запросов /api/v1/ на бэкенд.
+           * Настроить CI/CD (Continuous Integration/Continuous Deployment) для автоматической сборки и развертывания Backend и Frontend приложений.
+           * Подготовить тестовые и продуктивные окружения.
+       * Зависимости: Задача 1.1, Задача 1.3.
+
+  Epic 5: `[ADMIN]` - Аудит
+
+   * Задача 5.1 (Backend): API для аудита.
+       * Что внутри:
+           * Создать/обновить модели данных (ORM) для таблицы audit_logs.
+           * Реализовать эндпоинт GET /api/v1/audit-logs.
+           * Встроить логику записи событий в audit_logs в другие API-эндпоинты (например, при создании шаблона, смене статуса задания).
+           * Написать юнит-тесты.
+       * Зависимости: Задача 1.1.
+
+   * Задача 5.2 (Frontend): UI для аудита.
+       * Что внутри:
+           * Разработать UI для администратора: страница для просмотра журнала событий с фильтрацией и пагинацией.
+           * Интегрировать с GET /api/v1/audit-logs.
+           * Написать UI-тесты.
+       * Зависимости: Задача 1.4, Задача 5.1.
+
+ 
+
+
+
+
+================================================================================================
+Полная спецификация API (с примерами JSON)
+
+  Общие принципы
+   * Базовый URL: /api/v1
+   * Аутентификация: Все защищенные эндпоинты требуют токен в заголовке Authorization: Bearer <JWT_TOKEN>.
+   * Формат данных: application/json
+
+  ---
+
+  1. Аутентификация (`/auth`)
+
+   * `POST /auth/login`
+       * Описание: Аутентификация пользователя по email и паролю.
+       * Роль: ANY
+       * Пример запроса:
+
+   1         {
+   2           "email": "moderator@example.com",
+   3           "password": "password123"
+   4         }
+       * Пример ответа (200 OK):
+
+   1         {
+   2           "accessToken":
+     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMe
+     Jf36POk6yJV_adQssw5c"
+   3         }
+       * Логика бэкенда: Проверяет учетные данные, генерирует JWT токен.
+
+   * `POST /auth/register`
+       * Описание: Регистрация нового пользователя в системе.
+       * Роль: ANY (или ADMIN, в зависимости от бизнес-логики)
+       * Пример запроса:
+
+   1         {
+   2           "email": "newuser@example.com",
+   3           "password": "securepassword",
+   4           "fullName": "Новый Пользователь",
+   5           "sourceId": 10 // ID источника, к которому привязан пользователь
+   6         }
+       * Пример ответа (201 Created):
+
+   1         {
+   2           "id": 15,
+   3           "email": "newuser@example.com",
+   4           "fullName": "Новый Пользователь",
+   5           "sourceId": 10
+   6         }
+       * Логика бэкенда: Создает запись в users, хеширует пароль, назначает роль USER по умолчанию.
+
+   * `GET /auth/me`
+       * Описание: Получение информации о текущем авторизованном пользователе.
+       * Роль: USER
+       * Пример ответа (200 OK):
+   1         {
+   2           "id": 5,
+   3           "fullName": "Иванов Иван Иванович",
+   4           "email": "ivanov@example.com",
+   5           "sourceId": 1,
+   6           "roles": ["USER"]
+   7         }
+       * Логика бэкенда: Извлекает userId из JWT токена, делает SELECT из users и user_roles.
+
+  ---
+
+  2. Шаблоны (`/templates`)
+
+   * `POST /templates`
+       * Описание: Создание нового шаблона опросника и его первой версии в статусе DRAFT.
+       * Роль: MODERATOR
+       * Пример запроса:
+
+    1         {
+    2           "name": "Еженедельный отчет по KPI",
+    3           "description": "Отчет о выполнении KPI за прошлую неделю.",
+    4           "items": [
+    5             {
+    6               "title": "Ключевые метрики",
+    7               "display_order": 1,
+    8               "fields": [
+    9                 { "label": "Выполнено задач", "fieldType": "text", "isRequired": true, "display_order": 1 },
+   10                 { "label": "Просрочено задач", "fieldType": "text", "isRequired": true, "display_order": 2 }
+   11               ]
+   12             }
+   13           ]
+   14         }
+       * Пример ответа (201 Created):
+
+   1         {
+   2           "id": 3,
+   3           "name": "Еженедельный отчет по KPI",
+   4           "status": "DRAFT",
+   5           "latestVersion": 1
+   6         }
+       * Логика бэкенда: INSERT в templates, template_versions, questionnaire_items, fields (как подробно описано в Шаге 1 сценария).
+
+   * `GET /templates`
+       * Описание: Получение списка всех созданных шаблонов.
+       * Роль: MODERATOR
+       * Пример ответа (200 OK):
+
+    1         [
+    2           {
+    3             "id": 1,
+    4             "name": "Еженедельный отчет",
+    5             "status": "PUBLISHED",
+    6             "latestVersion": 1,
+    7             "author": { "id": 101, "fullName": "Петров Петр" }
+    8           },
+    9           {
+   10             "id": 3,
+   11             "name": "Еженедельный отчет по KPI",
+   12             "status": "DRAFT",
+   13             "latestVersion": 1,
+   14             "author": { "id": 101, "fullName": "Петров Петр" }
+   15           }
+   16         ]
+       * Логика бэкенда: SELECT из templates, JOIN с users для автора, JOIN с template_versions для latestVersion.
+
+
+   * `GET /templates/{templateId}`
+       * Описание: Получение детальной информации об одном шаблоне, включая список его версий.
+       * Роль: MODERATOR
+       * Пример ответа (200 OK):
+
+    1         {
+    2           "id": 1,
+    3           "name": "Еженедельный отчет",
+    4           "description": "Отчет о проделанной работе за неделю",
+    5           "status": "PUBLISHED",
+    6           "author": { "id": 101, "fullName": "Петров Петр" },
+    7           "versions": [
+    8             { "id": 1, "versionNumber": 1, "createdAt": "2026-03-01T10:00:00Z" },
+    9             { "id": 2, "versionNumber": 2, "changelog": "Добавлено поле 'Комментарии'", "createdAt": "2026-03-08T10:00:00Z" }
+   10           ]
+   11         }
+       * Логика бэкенда: SELECT из templates, JOIN с users, SELECT из template_versions для этого шаблона.
+
+   * `PUT /templates/{templateId}`
+       * Описание: Обновление основной информации шаблона (имя, описание).
+       * Роль: MODERATOR
+       * Пример запроса:
+
+   1         {
+   2           "name": "Еженедельный отчет (обновлено)",
+   3           "description": "Обновленное описание."
+   4         }
+       * Пример ответа (200 OK): (Обновленный объект шаблона).
+       * Логика бэкенда: UPDATE templates.
+
+   * `DELETE /templates/{templateId}`
+       * Описание: Архивирование шаблона (меняет статус на ARCHIVED).
+       * Роль: MODERATOR
+       * Пример ответа (204 No Content): Пустой ответ.
+       * Логика бэкенда: UPDATE templates SET status = 'ARCHIVED'.
+
+   * `POST /templates/{templateId}/publish`
+       * Описание: Публикация шаблона с возможностью автоматического назначения всем источникам.
+       * Роль: MODERATOR
+       * Пример запроса:
+   1         {
+   2           "assignToAllSources": true
+   3         }
+       * Пример ответа (200 OK):
+
+   1         {
+   2           "success": true,
+   3           "message": "Шаблон опубликован. Создано 15 заданий со статусом LOCKED."
+   4         }
+       * Логика бэкенда: UPDATE templates.status на PUBLISHED. Если assignToAllSources = true, то SELECT из sources и INSERT в assignments для
+         каждого источника.
+
+   * `POST /templates/{templateId}/versions`
+       * Описание: Создание новой версии опубликованного шаблона.
+       * Роль: MODERATOR
+       * Пример запроса:
+
+    1         {
+    2           "changelog": "Добавлено поле 'Комментарии' в пункт 'Общие сведения'.",
+    3           "items": [
+    4             {
+    5               "title": "Общие сведения",
+    6               "display_order": 1,
+    7               "fields": [
+    8                 { "label": "Название", "fieldType": "text", "isRequired": true, "display_order": 1 },
+    9                 { "label": "Комментарии", "fieldType": "text", "isRequired": false, "display_order": 2 }
+   10               ]
+   11             }
+   12           ]
+   13         }
+       * Пример ответа (201 Created):
+
+   1         {
+   2           "id": 2,
+   3           "versionNumber": 2,
+   4           "templateId": 1
+   5         }
+       * Логика бэкенда: SELECT MAX(version_number) для шаблона, INSERT в template_versions (с инкрементированным номером версии), INSERT в
+         questionnaire_items и fields для новой версии.
+
+   * `GET /templates/{templateId}/versions/{versionNumber}`
+       * Описание: Получение полной структуры конкретной версии шаблона для рендеринга формы.
+       * Роль: USER, MODERATOR
+       * Пример ответа (200 OK):
+
+
+    1         {
+    2           "id": 1,
+    3           "versionNumber": 1,
+    4           "templateId": 1,
+    5           "name": "Еженедельный отчет",
+    6           "items": [
+    7             {
+    8               "id": 10,
+    9               "title": "Задачи на неделю",
+   10               "display_order": 1,
+   11               "fields": [
+   12                 { "id": 101, "label": "Текст отчета", "fieldType": "text", "isRequired": true, "display_order": 1 },
+   13                 { "id": 102, "label": "Файл отчета", "fieldType": "file", "isRequired": false, "display_order": 2 }
+   14               ]
+   15             }
+   16           ]
+   17         }
+       * Логика бэкенда: SELECT из template_versions, questionnaire_items, fields, собирает вложенный JSON.
+
+  ---
+
+  3. Задания (`/assignments`)
+
+   * `POST /assignments`
+       * Описание: Ручное назначение опросника одной или нескольким источникам.
+       * Роль: MODERATOR
+       * Пример запроса:
+
+   1         {
+   2           "name": "Еженедельный отчет - Волна 2",
+   3           "templateId": 1,
+   4           "sourceIds": [1, 2],
+   5           "dueDate": "2026-04-01T00:00:00Z"
+   6         }
+       * Пример ответа (201 Created):
+   1         {
+   2           "message": "Assignments created successfully.",
+   3           "createdCount": 2,
+   4           "assignmentIds": [10, 11]
+   5         }
+       * Логика бэкенда: INSERT в assignments для каждого sourceId из массива.
+
+   * `GET /assignments/my`
+       * Описание: Получение списка заданий, доступных для источника текущего пользователя.
+       * Роль: USER
+       * Пример ответа (200 OK):
+
+    1         [
+    2           {
+    3             "id": 1,
+    4             "name": "Еженедельный отчет - 15 марта",
+    5             "status": "IN_PROGRESS",
+    6             "template": { "id": 1, "name": "Еженедельный отчет" },
+    7             "assignee": { "id": 5, "fullName": "Иванов Иван" },
+    8             "dueDate": "2026-03-22T00:00:00Z"
+    9           },
+   10           {
+   11             "id": 10,
+   12             "name": "Еженедельный отчет - Волна 2",
+   13             "status": "LOCKED",
+   14             "template": { "id": 1, "name": "Еженедельный отчет" },
+   15             "assignee": null,
+   16             "dueDate": "2026-04-01T00:00:00Z"
+   17           }
+   18         ]
+       * Логика бэкенда: SELECT из assignments, JOIN с templates, users (для assignee), фильтрация по source_id пользователя.
+
+   * `GET /assignments`
+       * Описание: Получение списка всех заданий в системе (для модератора).
+       * Роль: MODERATOR
+       * Пример ответа (200 OK): (Массив объектов заданий, как в GET /my, но для всех источников).
+       * Логика бэкенда: SELECT из assignments, JOIN с templates, users, sources.
+
+   * `PUT /assignments/{assignmentId}`
+       * Описание: Ручное изменение статуса задания модератором (например, для отмены).
+       * Роль: MODERATOR
+       * Пример запроса:
+
+   1         {
+   2           "status": "CANCELLED",
+   3           "cancellationReason": "Срок истек, источник не заполнил."
+   4         }
+       * Пример ответа (200 OK):
+
+   1         {
+   2           "id": 1,
+   3           "name": "Еженедельный отчет - 15 марта",
+   4           "status": "CANCELLED",
+   5           "cancellationReason": "Срок истек, источник не заполнил."
+   6         }
+       * Логика бэкенда: UPDATE assignments.
+
+   * `POST /assignments/unlock`
+       * Описание: Массовая активация (разблокировка) заданий.
+       * Роль: MODERATOR
+       * Пример запроса:
+
+   1         {
+   2           "assignmentIds": [1, 10]
+   3         }
+       * Пример ответа (200 OK):
+
+   1         {
+   2           "unlockedCount": 2,
+   3           "message": "Задания успешно активированы."
+   4         }
+       * Логика бэкенда: UPDATE assignments SET status = 'PENDING' WHERE id IN (...) AND status = 'LOCKED'.
+
+   * `POST /assignments/{assignmentId}/claim`
+       * Описание: "Взять в работу" задание, доступное для источника.
+       * Роль: USER
+       * Пример ответа (200 OK):
+
+
+
+   1         {
+   2           "id": 1,
+   3           "name": "Еженедельный отчет - 15 марта",
+   4           "status": "IN_PROGRESS",
+   5           "assignee": { "id": 5, "fullName": "Иванов Иван" }
+   6         }
+       * Логика бэкенда: UPDATE assignments SET status = 'IN_PROGRESS', assignee_user_id = <userId> WHERE id = {assignmentId} AND status = 
+         'PENDING'.
+
+  ---
+
+  4. Файлы (`/files`)
+
+   * `POST /files/upload`
+       * Описание: Служебный эндпоинт для загрузки одного файла.
+       * Роль: USER
+       * Пример запроса: multipart/form-data с полем file.
+       * Пример ответа (201 Created):
+
+   1         {
+   2           "filePath": "a1b2c3d4-e5f6-7890-abcd.pdf",
+   3           "originalFilename": "отчет.pdf"
+   4         }
+       * Логика бэкенда: Сохраняет файл на диск, возвращает filePath.
+
+  ---
+
+  5. Заполнения и Ответы (`/submissions`, `/answers`)
+
+   * `POST /submissions`
+       * Описание: Отправка заполненной формы на проверку.
+       * Роль: USER
+       * Пример запроса:
+
+   1         {
+   2           "assignmentId": 1,
+   3           "versionId": 1,
+   4           "status": "SUBMITTED",
+   5           "answers": [
+   6             { "fieldId": 101, "textAnswer": "На этой неделе выполнено 5 задач." },
+   7             { "fieldId": 102, "file": { "filePath": "abc-123.pdf", "originalFilename": "отчет.pdf" } }
+   8           ]
+   9         }
+       * Пример ответа (201 Created):
+   1         {
+   2           "id": 501,
+   3           "status": "SUBMITTED"
+   4         }
+       * Логика бэкенда: INSERT в submissions, INSERT в answers (для каждого ответа).
+
+   * `GET /submissions/{submissionId}`
+       * Описание: Универсальный эндпоинт для просмотра состояния конкретного заполнения.
+       * Роль: USER, MODERATOR
+       * Пример ответа (200 OK):
+
+    1         {
+    2           "id": 501,
+    3           "status": "SUBMITTED",
+    4           "user": { "id": 5, "fullName": "Иванов Иван" },
+    5           "template": { "id": 1, "name": "Еженедельный отчет", "versionNumber": 1 },
+    6           "items": [
+    7             {
+    8               "id": 10,
+    9               "title": "Задачи на неделю",
+   10               "answers": [
+   11                 { "id": 801, "field": { "id": 101, "label": "Текст отчета" }, "textAnswer": "На этой неделе выполнено 5 задач.",
+      "validationStatus": "PENDING" },
+   12                 { "id": 802, "field": { "id": 102, "label": "Файл отчета" }, "file": { "originalFilename": "отчет.pdf", "downloadUrl":
+      "/api/v1/submissions/501/answers/802/file" }, "validationStatus": "PENDING" }
+   13               ]
+   14             }
+   15           ]
+   16         }
+       * Логика бэкенда: SELECT из submissions, answers, fields, questionnaire_items, users. Конструирует downloadUrl.
+
+   * `PUT /submissions/{submissionId}`
+       * Описание: Обновление статуса заполнения (например, модератором на APPROVED или REJECTED, или пользователем при повторной отправке).
+       * Роль: USER, MODERATOR
+       * Пример запроса (Модератор утверждает):
+   1         {
+   2           "status": "APPROVED"
+   3         }
+       * Пример ответа (200 OK):
+
+   1         {
+   2           "id": 501,
+   3           "status": "APPROVED"
+   4         }
+       * Логика бэкенда: UPDATE submissions. Если status = APPROVED, то также UPDATE assignments.status на COMPLETED.
+
+   * `POST /answers/{answerId}/validate`
+       * Описание: Валидация модератором одного конкретного ответа.
+       * Роль: MODERATOR
+       * Пример запроса:
+
+   1         {
+   2           "status": "REJECTED",
+   3           "comment": "Файл не подписан."
+   4         }
+       * Пример ответа (200 OK):
+
+   1         {
+   2           "id": 802,
+   3           "validationStatus": "REJECTED",
+   4           "moderatorComment": "Файл не подписан."
+   5         }
+       * Логика бэкенда: UPDATE answers (меняет validation_status и moderator_comment).
+
+
+   * `GET /api/v1/submissions/{submissionId}/answers/{answerId}/file`
+       * Описание: Безопасное скачивание файла, прикрепленного к ответу.
+       * Роль: USER, MODERATOR
+       * Пример ответа (200 OK): Бинарные данные файла.
+       * Логика бэкенда: Проверяет аутентификацию и авторизацию пользователя. Если права есть, читает файл с диска и стримит его клиенту.
+
+  ---
+
+  6. Аудит (`/audit-logs`)
+
+   * `GET /audit-logs`
+       * Описание: Получение списка всех важных событий в системе.
+       * Роль: ADMIN
+       * Пример ответа (200 OK):
+
+    1         [
+    2           {
+    3             "id": 1234,
+    4             "user": { "id": 101, "fullName": "Петров Петр" },
+    5             "action": "SUBMISSION_STATUS_UPDATED",
+    6             "targetEntity": "submissions",
+    7             "targetId": 501,
+    8             "details": { "from": "SUBMITTED", "to": "APPROVED" },
+    9             "createdAt": "2026-03-22T15:30:00Z"
+   10           }
+   11         ]
+       * Логика бэкенда: SELECT из audit_logs, JOIN с users, фильтрация по параметрам.
+
+  ---
+
+  Это полная и детализированная спецификация API. Она включает все эндпоинты, их назначение, примеры запросов и ответов, а также краткое описание
+  логики бэкенда.
+
+
+
+================================================================================================
