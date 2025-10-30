@@ -418,3 +418,166 @@
   опросника, по какому поручению и для какого источника.
 
 ======================================================================
+Финальная структура таблиц БД (с детальными комментариями)
+
+  `sources` (Источники данных, например, компании или отделы)
+   * id: BIGSERIAL PRIMARY KEY
+       * Комментарий: Технический уникальный идентификатор записи, генерируется базой данных автоматически.
+   * name: VARCHAR(255) UNIQUE NOT NULL
+       * Комментарий: Человекочитаемое название источника, например, "Тульский филиал". Должно быть уникальным.
+   * details: JSONB NULL
+       * Комментарий: Поле для хранения любых дополнительных структурированных данных об источнике, например, { "inn": "1234567890", "address": "г. Тула..." }. NULL, если
+         доп. данных нет.
+   * created_at: TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       * Комментарий: Временная метка, автоматически устанавливаемая при создании записи. TIMESTAMPTZ хранит время с учетом часового пояса.
+   * Рекомендуемые индексы: (name)
+
+  `users` (Пользователи системы)
+   * id: BIGSERIAL PRIMARY KEY
+       * Комментарий: Уникальный ID пользователя.
+   * source_id: BIGINT NULL REFERENCES sources(id) ON DELETE SET NULL
+       * Комментарий: Внешний ключ, указывающий, к какому "Источнику" принадлежит этот пользователь. NULL для системных пользователей (модераторы, админы). ON DELETE SET 
+         NULL означает, что если источник удалят, у пользователя это поле станет NULL, но сам пользователь не удалится.
+   * email: VARCHAR(255) UNIQUE NOT NULL
+       * Комментарий: Email для входа, должен быть уникальным.
+   * password_hash: VARCHAR(255) NOT NULL
+       * Комментарий: Хеш пароля пользователя. Никогда не храните пароли в открытом виде.
+   * full_name: VARCHAR(255) NULL
+       * Комментарий: Полное имя пользователя для отображения в интерфейсе.
+   * created_at: TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   * Рекомендуемые индексы: (source_id), (email)
+
+  `roles` (Справочник ролей)
+   * id: SERIAL PRIMARY KEY
+       * Комментарий: Уникальный ID роли.
+   * name: VARCHAR(50) UNIQUE NOT NULL
+       * Комментарий: Уникальное кодовое имя роли. Например: 'USER', 'MODERATOR', 'ADMIN'.
+   * description: TEXT NULL
+       * Комментарий: Человекочитаемое описание прав и возможностей этой роли.
+   * Рекомендуемые индексы: (name) (создается автоматически UNIQUE-констрейнтом)
+
+  `user_roles` (Связующая таблица: какая роль у какого пользователя)
+   * user_id: BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE
+       * Комментарий: Внешний ключ, указывающий на id в таблице users.
+   * role_id: INT NOT NULL REFERENCES roles(id) ON DELETE CASCADE
+       * Комментарий: Внешний ключ, указывающий на id в таблице roles.
+   * `PRIMARY KEY (user_id, role_id)`
+       * Комментарий: Составной первичный ключ, гарантирующий, что одна и та же роль не может быть присвоена одному и тому же пользователю дважды.
+   * Рекомендуемые индексы: (user_id), (role_id) (создаются автоматически PRIMARY KEY-констрейнтом)
+
+  `templates` (Шаблоны опросников)
+   * id: BIGSERIAL PRIMARY KEY
+   * name: VARCHAR(255) NOT NULL
+       * Комментарий: Название опросника, например, "Квартальный отчет".
+   * description: TEXT NULL
+       * Комментарий: Подробное описание или инструкция к опроснику.
+   * author_id: BIGINT NOT NULL REFERENCES users(id)
+       * Комментарий: ID пользователя (модератора), который создал этот шаблон.
+   * status: VARCHAR(50) NOT NULL DEFAULT 'DRAFT'
+       * Комментарий: Жизненный цикл шаблона: DRAFT (черновик), PUBLISHED (опубликован), ARCHIVED (в архиве).
+   * created_at, updated_at: TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   * Рекомендуемые индексы: (author_id), (status)
+
+  `template_versions` (Версии шаблонов)
+   * id: BIGSERIAL PRIMARY KEY
+   * template_id: BIGINT NOT NULL REFERENCES templates(id) ON DELETE CASCADE
+       * Комментарий: Ссылка на родительский шаблон. ON DELETE CASCADE означает, что при удалении шаблона удалятся и все его версии.
+   * version_number: INT NOT NULL
+       * Комментарий: Номер версии (1, 2, 3...).
+   * changelog: TEXT NULL
+       * Комментарий: Текстовое описание того, что изменилось в этой версии.
+   * created_at: TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   * Рекомендуемые индексы: Уникальный составной индекс на (template_id, version_number).
+
+  `questionnaire_items` (Пункты внутри опросника)
+   * id: BIGSERIAL PRIMARY KEY
+   * version_id: BIGINT NOT NULL REFERENCES template_versions(id) ON DELETE CASCADE
+       * Комментарий: Ссылка на конкретную версию шаблона, к которой относится этот пункт.
+   * title: VARCHAR(255) NOT NULL
+       * Комментарий: Заголовок пункта, например, "Пункт 1: Финансовые показатели".
+   * description: TEXT NULL
+       * Комментарий: Описание для всего пункта.
+   * display_order: INT NOT NULL DEFAULT 0
+       * Комментарий: Порядок сортировки пунктов в форме.
+   * Рекомендуемые индексы: (version_id)
+
+  `fields` (Поля для ввода внутри пункта)
+   * id: BIGSERIAL PRIMARY KEY
+   * item_id: BIGINT NOT NULL REFERENCES questionnaire_items(id) ON DELETE CASCADE
+       * Комментарий: Ссылка на родительский пункт, к которому относится это поле.
+   * label: VARCHAR(255) NOT NULL
+       * Комментарий: Текст рядом с полем ввода, например, "Ваше ФИО".
+   * field_type: VARCHAR(50) NOT NULL
+       * Комментарий: Тип поля: TEXT или FILE.
+   * is_required: BOOLEAN NOT NULL DEFAULT TRUE
+       * Комментарий: true, если поле обязательно для заполнения.
+   * display_order: INT NOT NULL DEFAULT 0
+       * Комментарий: Порядок сортировки полей внутри одного пункта.
+   * Рекомендуемые индексы: (item_id)
+
+  `assignments` (Задания, назначенные на источники)
+   * id: BIGSERIAL PRIMARY KEY
+   * name: VARCHAR(255) NULL
+       * Комментарий: Опциональное наименование для конкретного экземпляра задания, например, "Квартальный отчет - Волна 2". Если не указано, по умолчанию используется
+         название шаблона.
+   * template_id: BIGINT NOT NULL REFERENCES templates(id)
+       * Комментарий: Какой шаблон был назначен.
+   * source_id: BIGINT NOT NULL REFERENCES sources(id)
+       * Комментарий: На какой источник было сделано назначение.
+   * status: VARCHAR(50) NOT NULL DEFAULT 'LOCKED'
+       * Комментарий: Жизненный цикл задания: LOCKED, PENDING, IN_PROGRESS, COMPLETED, CANCELLED.
+   * assignee_user_id: BIGINT NULL REFERENCES users(id)
+       * Комментарий: ID пользователя, который "взял" это задание в работу. NULL, пока задание никто не взял.
+   * due_date: TIMESTAMPTZ NULL
+       * Комментарий: Срок, до которого нужно выполнить задание.
+   * assigned_by_id: BIGINT NOT NULL REFERENCES users(id)
+       * Комментарий: ID модератора, который создал это назначение.
+   * cancellation_reason: TEXT NULL
+       * Комментарий: Причина отмены задания, если status = CANCELLED.
+   * Рекомендуемые индексы: (source_id, status), (assignee_user_id)
+
+  `submissions` (Заполнения опросников пользователями)
+   * id: BIGSERIAL PRIMARY KEY
+   * assignment_id: BIGINT NOT NULL REFERENCES assignments(id)
+       * Комментарий: Ссылка на родительское задание, в рамках которого выполняется это заполнение.
+   * version_id: BIGINT NOT NULL REFERENCES template_versions(id)
+       * Комментарий: Какая именно версия шаблона была заполнена.
+   * user_id: BIGINT NOT NULL REFERENCES users(id)
+       * Комментарий: ID конкретного пользователя, который нажимал кнопки и вводил данные.
+   * status: VARCHAR(50) NOT NULL
+       * Комментарий: Жизненный цикл проверки: DRAFT, SUBMITTED, IN_REVIEW, REJECTED, APPROVED.
+   * created_at, updated_at, submitted_at, reviewed_at: TIMESTAMPTZ
+   * Рекомендуемые индексы: (assignment_id), (user_id, status)
+
+  `answers` (Ответы на конкретные поля)
+   * id: BIGSERIAL PRIMARY KEY
+   * submission_id: BIGINT NOT NULL REFERENCES submissions(id) ON DELETE CASCADE
+       * Комментарий: Ссылка на родительское "Заполнение".
+   * field_id: BIGINT NOT NULL REFERENCES fields(id)
+       * Комментарий: Ссылка на конкретное поле в шаблоне, на которое дан этот ответ. Это ключевая связь.
+   * text_answer: TEXT NULL
+       * Комментарий: Здесь хранится текстовый ответ пользователя.
+   * file_path: VARCHAR(1024) NULL
+       * Комментарий: Здесь хранится уникальное имя файла на диске, которое вернул эндпоинт /files/upload.
+   * original_filename: VARCHAR(255) NULL
+       * Комментарий: Исходное имя файла, которое было на компьютере пользователя.
+   * validation_status: VARCHAR(50) NOT NULL DEFAULT 'PENDING'
+       * Комментарий: Статус проверки ответа модератором: PENDING, APPROVED, REJECTED.
+   * moderator_comment: TEXT NULL
+       * Комментарий: Комментарий модератора, если ответ был отклонен.
+   * Рекомендуемые индексы: (submission_id), (field_id)
+
+  `audit_logs` (Журнал действий / Аудит)
+   * id: BIGSERIAL PRIMARY KEY
+   * user_id: BIGINT NULL REFERENCES users(id) ON DELETE SET NULL
+       * Комментарий: ID пользователя, который совершил действие. Может быть NULL, если действие было инициировано самой системой.
+   * action: VARCHAR(255) NOT NULL
+       * Комментарий: Краткое кодовое название действия. Например: SUBMISSION_APPROVED.
+   * target_entity: VARCHAR(100) NULL
+       * Комментарий: Название сущности (таблицы), над которой было произведено действие.
+   * target_id: BIGINT NULL
+       * Комментарий: ID конкретной записи, которая была изменена.
+   * details: JSONB NULL
+       * Комментарий: Детали действия в формате JSON.
+   * created_at: TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   * Рекомендуемые индексы: (user_id), составной индекс на (target_entity, target_id).
